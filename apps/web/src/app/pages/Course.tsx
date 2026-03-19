@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useParams } from "react-router";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router";
 import {
   Code2,
   ChevronLeft,
@@ -15,113 +15,204 @@ import {
   Download,
   Share2,
 } from "lucide-react";
+import { getAuthSession } from "../lib/auth";
+import {
+  completeLesson,
+  createCourseComment,
+  fetchCourseComments,
+  fetchCourseDetails,
+  fetchCourseWorkspace,
+  type CourseComment,
+  type CourseDetailsResponse,
+  type CourseWorkspaceResponse,
+} from "../lib/lms-api";
+
+function formatDurationMinutes(minutes: number): string {
+  return `${minutes} мин`;
+}
+
+function formatDateLabel(value: string): string {
+  return new Date(value).toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "long",
+  });
+}
 
 export function Course() {
   const { courseId } = useParams();
-  const [activeLesson, setActiveLesson] = useState(0);
+  const navigate = useNavigate();
+  const session = getAuthSession();
   const [activeTab, setActiveTab] = useState<"overview" | "lessons" | "resources">("lessons");
+  const [courseDetails, setCourseDetails] = useState<CourseDetailsResponse | null>(null);
+  const [courseWorkspace, setCourseWorkspace] = useState<CourseWorkspaceResponse | null>(null);
+  const [comments, setComments] = useState<CourseComment[]>([]);
+  const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
+  const [commentBody, setCommentBody] = useState("");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [isCompletingLesson, setIsCompletingLesson] = useState(false);
 
-  const courseData = {
-    fullstack: {
-      title: "Full Stack Web Development",
-      instructor: "Дмитрий Иванов",
-      rating: 4.8,
-      students: 5420,
-      duration: "6 месяцев",
-      modules: [
-        {
-          title: "Модуль 1: Основы HTML & CSS",
-          lessons: [
-            { title: "Введение в HTML", duration: "15 мин", completed: true },
-            { title: "HTML теги и структура", duration: "20 мин", completed: true },
-            { title: "CSS стили и селекторы", duration: "25 мин", completed: true },
-            { title: "CSS Flexbox", duration: "30 мин", completed: true },
-          ],
-        },
-        {
-          title: "Модуль 2: JavaScript Основы",
-          lessons: [
-            { title: "Переменные и типы данных", duration: "20 мин", completed: true },
-            { title: "Функции в JavaScript", duration: "25 мин", completed: true },
-            { title: "Массивы и объекты", duration: "30 мин", completed: false },
-            { title: "DOM манипуляции", duration: "35 мин", completed: false },
-          ],
-        },
-        {
-          title: "Модуль 3: React Fundamentals",
-          lessons: [
-            { title: "Введение в React", duration: "20 мин", completed: false },
-            { title: "Компоненты и Props", duration: "25 мин", completed: false },
-            { title: "State и useState", duration: "30 мин", completed: false },
-            { title: "useEffect и Lifecycle", duration: "35 мин", completed: false },
-          ],
-        },
-        {
-          title: "Модуль 4: Backend с Node.js",
-          lessons: [
-            { title: "Настройка Node.js", duration: "15 мин", completed: false, locked: true },
-            { title: "Express.js основы", duration: "25 мин", completed: false, locked: true },
-            { title: "REST API создание", duration: "30 мин", completed: false, locked: true },
-            { title: "База данных MongoDB", duration: "40 мин", completed: false, locked: true },
-          ],
-        },
-      ],
-    },
-    python: {
-      title: "Python для начинающих",
-      instructor: "Анна Смирнова",
-      rating: 4.9,
-      students: 8230,
-      duration: "3 месяца",
-      modules: [
-        {
-          title: "Модуль 1: Основы Python",
-          lessons: [
-            { title: "Установка Python", duration: "10 мин", completed: true },
-            { title: "Первая программа", duration: "15 мин", completed: true },
-            { title: "Переменные и типы", duration: "20 мин", completed: true },
-          ],
-        },
-      ],
-    },
-    datascience: {
-      title: "Data Science & ML",
-      instructor: "Петр Козлов",
-      rating: 4.7,
-      students: 3120,
-      duration: "8 месяцев",
-      modules: [
-        {
-          title: "Модуль 1: Введение в Data Science",
-          lessons: [
-            { title: "Что такое Data Science", duration: "20 мин", completed: true },
-            { title: "Инструменты аналитика", duration: "25 мин", completed: true },
-          ],
-        },
-      ],
-    },
+  useEffect(() => {
+    if (!courseId) {
+      navigate("/dashboard", { replace: true });
+      return;
+    }
+
+    void loadCourse(courseId);
+  }, [courseId, navigate]);
+
+  const loadCourse = async (slug: string) => {
+    try {
+      setIsLoading(true);
+      setErrorMessage(null);
+
+      const [details, nextComments] = await Promise.all([
+        fetchCourseDetails(slug),
+        fetchCourseComments(slug),
+      ]);
+
+      setCourseDetails(details);
+      setComments(nextComments);
+
+      if (session) {
+        try {
+          const workspace = await fetchCourseWorkspace(slug, session.user.id);
+          setCourseWorkspace(workspace);
+        } catch {
+          setCourseWorkspace(null);
+        }
+      } else {
+        setCourseWorkspace(null);
+      }
+
+      const firstLessonId =
+        details.modules
+          .flatMap((module) => module.lessons)
+          .sort((left, right) => left.position - right.position)[0]?.id ?? null;
+
+      setActiveLessonId((current) => current ?? firstLessonId);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Не удалось загрузить курс",
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const course = courseData[courseId as keyof typeof courseData] || courseData.fullstack;
+  const course = courseWorkspace?.course ?? courseDetails;
+
+  const modules = useMemo(() => {
+    if (!course) {
+      return [];
+    }
+
+    return course.modules.map((module) => ({
+      ...module,
+      lessons: module.lessons.map((lesson) => ({
+        ...lesson,
+        durationLabel:
+          "durationMinutes" in lesson
+            ? formatDurationMinutes(lesson.durationMinutes)
+            : formatDurationMinutes(lesson.durationMinutes),
+      })),
+    }));
+  }, [course]);
+
+  const allLessons = useMemo(
+    () =>
+      modules
+        .flatMap((module) => module.lessons)
+        .sort((left, right) => left.position - right.position),
+    [modules],
+  );
+
+  const activeLesson =
+    allLessons.find((lesson) => lesson.id === activeLessonId) ?? allLessons[0] ?? null;
+
+  const progress = courseWorkspace?.enrollment ?? null;
+
+  const handleCompleteLesson = async () => {
+    if (!courseId || !session || !activeLesson || !courseWorkspace) {
+      return;
+    }
+
+    try {
+      setIsCompletingLesson(true);
+      await completeLesson(courseId, activeLesson.id, session.user.id);
+      await loadCourse(courseId);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Не удалось отметить урок",
+      );
+    } finally {
+      setIsCompletingLesson(false);
+    }
+  };
+
+  const handleSubmitComment = async () => {
+    if (!courseId || !session || !commentBody.trim()) {
+      return;
+    }
+
+    try {
+      setIsSubmittingComment(true);
+      await createCourseComment(courseId, {
+        userId: session.user.id,
+        body: commentBody.trim(),
+      });
+      setCommentBody("");
+      const nextComments = await fetchCourseComments(courseId);
+      setComments(nextComments);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Не удалось отправить комментарий",
+      );
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8">
+        <div className="max-w-7xl mx-auto space-y-6">
+          <div className="h-16 rounded-xl bg-white border border-gray-100 animate-pulse" />
+          <div className="grid lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 h-[32rem] rounded-xl bg-white border border-gray-100 animate-pulse" />
+            <div className="h-[32rem] rounded-xl bg-white border border-gray-100 animate-pulse" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!course) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8">
+        <div className="max-w-4xl mx-auto rounded-xl border border-red-200 bg-red-50 px-6 py-5 text-red-700">
+          {errorMessage ?? "Курс не найден"}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white border-b sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link
-                to="/dashboard"
+                to={session ? "/dashboard" : "/"}
                 className="p-2 hover:bg-gray-100 rounded-lg transition"
               >
                 <ChevronLeft className="size-5 text-gray-600" />
               </Link>
               <div className="flex items-center gap-2">
                 <Code2 className="size-6 text-blue-600" />
-                <h1 className="text-xl font-bold text-gray-900">
-                  {course.title}
-                </h1>
+                <h1 className="text-xl font-bold text-gray-900">{course.title}</h1>
               </div>
             </div>
 
@@ -129,34 +220,44 @@ export function Course() {
               <button className="p-2 hover:bg-gray-100 rounded-lg transition">
                 <Share2 className="size-5 text-gray-600" />
               </button>
-              <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium">
-                Скачать сертификат
-              </button>
+              {progress && (
+                <button
+                  type="button"
+                  disabled={!activeLesson || isCompletingLesson}
+                  onClick={handleCompleteLesson}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-60"
+                >
+                  {isCompletingLesson ? "Сохраняем..." : "Отметить урок"}
+                </button>
+              )}
             </div>
           </div>
         </div>
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {errorMessage && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-red-700">
+            {errorMessage}
+          </div>
+        )}
+
         <div className="grid lg:grid-cols-3 gap-8">
-          {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Video Player */}
             <div className="bg-gray-900 rounded-xl overflow-hidden aspect-video flex items-center justify-center">
               <div className="text-center">
-                <div className="inline-flex items-center justify-center size-20 bg-white/10 backdrop-blur-sm rounded-full mb-4 cursor-pointer hover:bg-white/20 transition">
+                <div className="inline-flex items-center justify-center size-20 bg-white/10 backdrop-blur-sm rounded-full mb-4">
                   <PlayCircle className="size-10 text-white" />
                 </div>
                 <p className="text-white text-lg font-medium">
-                  {course.modules[0].lessons[activeLesson]?.title || "Урок"}
+                  {activeLesson?.title ?? "Урок"}
                 </p>
                 <p className="text-gray-400 text-sm mt-1">
-                  Нажмите для воспроизведения
+                  {activeLesson ? formatDurationMinutes(activeLesson.durationMinutes) : "Видео пока недоступно"}
                 </p>
               </div>
             </div>
 
-            {/* Tabs */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100">
               <div className="border-b border-gray-200">
                 <div className="flex gap-6 px-6">
@@ -195,93 +296,61 @@ export function Course() {
 
               <div className="p-6">
                 {activeTab === "overview" && (
-                  <div className="space-y-4">
+                  <div className="space-y-5">
                     <div>
-                      <h3 className="text-lg font-bold text-gray-900 mb-2">
-                        О курсе
-                      </h3>
+                      <h3 className="text-lg font-bold text-gray-900 mb-2">О курсе</h3>
                       <p className="text-gray-600">
-                        Этот курс предназначен для тех, кто хочет освоить современную веб-разработку
-                        с нуля. Вы изучите все необходимые технологии: от основ HTML и CSS до продвинутых
-                        концепций React и разработки серверной части на Node.js.
+                        {course.description ?? course.summary}
                       </p>
                     </div>
 
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900 mb-3">
-                        Чему вы научитесь
-                      </h3>
-                      <ul className="space-y-2">
-                        <li className="flex items-start gap-2">
-                          <CheckCircle2 className="size-5 text-green-500 shrink-0 mt-0.5" />
-                          <span className="text-gray-600">
-                            Создавать современные веб-приложения с React
-                          </span>
-                        </li>
-                        <li className="flex items-start gap-2">
-                          <CheckCircle2 className="size-5 text-green-500 shrink-0 mt-0.5" />
-                          <span className="text-gray-600">
-                            Разрабатывать серверную часть с Node.js и Express
-                          </span>
-                        </li>
-                        <li className="flex items-start gap-2">
-                          <CheckCircle2 className="size-5 text-green-500 shrink-0 mt-0.5" />
-                          <span className="text-gray-600">
-                            Работать с базами данных MongoDB
-                          </span>
-                        </li>
-                        <li className="flex items-start gap-2">
-                          <CheckCircle2 className="size-5 text-green-500 shrink-0 mt-0.5" />
-                          <span className="text-gray-600">
-                            Применять лучшие практики разработки
-                          </span>
-                        </li>
-                      </ul>
+                    <div className="grid md:grid-cols-3 gap-4">
+                      <div className="rounded-lg border border-gray-200 p-4">
+                        <div className="text-sm text-gray-500">Длительность</div>
+                        <div className="mt-1 font-semibold text-gray-900">{course.duration}</div>
+                      </div>
+                      <div className="rounded-lg border border-gray-200 p-4">
+                        <div className="text-sm text-gray-500">Рейтинг</div>
+                        <div className="mt-1 font-semibold text-gray-900">{course.rating} / 5.0</div>
+                      </div>
+                      <div className="rounded-lg border border-gray-200 p-4">
+                        <div className="text-sm text-gray-500">Студентов</div>
+                        <div className="mt-1 font-semibold text-gray-900">{course.studentsCount.toLocaleString("ru-RU")}</div>
+                      </div>
                     </div>
 
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900 mb-3">
-                        Требования
-                      </h3>
-                      <ul className="space-y-2">
-                        <li className="flex items-start gap-2">
-                          <div className="size-1.5 bg-gray-400 rounded-full shrink-0 mt-2" />
-                          <span className="text-gray-600">
-                            Базовые знания работы с компьютером
-                          </span>
-                        </li>
-                        <li className="flex items-start gap-2">
-                          <div className="size-1.5 bg-gray-400 rounded-full shrink-0 mt-2" />
-                          <span className="text-gray-600">
-                            Желание учиться и развиваться
-                          </span>
-                        </li>
-                      </ul>
-                    </div>
+                    {course.instructor && (
+                      <div>
+                        <h3 className="text-lg font-bold text-gray-900 mb-2">Преподаватель</h3>
+                        <p className="text-gray-900 font-medium">{course.instructor.fullName}</p>
+                        <p className="text-sm text-gray-500">{course.instructor.title}</p>
+                        {course.instructor.bio && (
+                          <p className="text-gray-600 mt-3">{course.instructor.bio}</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {activeTab === "lessons" && (
                   <div className="space-y-4">
-                    {course.modules.map((module, moduleIndex) => (
-                      <div key={moduleIndex} className="border border-gray-200 rounded-lg">
+                    {modules.map((module) => (
+                      <div key={module.id} className="border border-gray-200 rounded-lg">
                         <div className="p-4 bg-gray-50 border-b border-gray-200">
-                          <h4 className="font-semibold text-gray-900">
-                            {module.title}
-                          </h4>
+                          <h4 className="font-semibold text-gray-900">{module.title}</h4>
                         </div>
                         <div className="divide-y divide-gray-200">
-                          {module.lessons.map((lesson, lessonIndex) => (
+                          {module.lessons.map((lesson) => (
                             <button
-                              key={lessonIndex}
-                              onClick={() => !lesson.locked && setActiveLesson(lessonIndex)}
-                              disabled={lesson.locked}
+                              key={lesson.id}
+                              onClick={() => !lesson.locked && setActiveLessonId(lesson.id)}
+                              disabled={Boolean((lesson as { locked?: boolean }).locked)}
                               className={`w-full p-4 flex items-center gap-4 hover:bg-gray-50 transition text-left ${
-                                lesson.locked ? "opacity-50 cursor-not-allowed" : ""
+                                (lesson as { locked?: boolean }).locked ? "opacity-50 cursor-not-allowed" : ""
                               }`}
                             >
                               <div className="shrink-0">
-                                {lesson.locked ? (
+                                {(lesson as { locked?: boolean }).locked ? (
                                   <div className="size-8 bg-gray-200 rounded-full flex items-center justify-center">
                                     <Lock className="size-4 text-gray-500" />
                                   </div>
@@ -296,11 +365,9 @@ export function Course() {
                                 )}
                               </div>
                               <div className="flex-1">
-                                <p className="font-medium text-gray-900">
-                                  {lesson.title}
-                                </p>
+                                <p className="font-medium text-gray-900">{lesson.title}</p>
                                 <p className="text-sm text-gray-500">
-                                  {lesson.duration}
+                                  {formatDurationMinutes(lesson.durationMinutes)}
                                 </p>
                               </div>
                               {lesson.completed && (
@@ -318,123 +385,104 @@ export function Course() {
 
                 {activeTab === "resources" && (
                   <div className="space-y-3">
-                    <div className="border border-gray-200 rounded-lg p-4 flex items-center justify-between hover:bg-gray-50 transition">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-100 rounded-lg">
-                          <FileText className="size-5 text-blue-600" />
+                    {course.resources.length ? (
+                      course.resources.map((resource) => (
+                        <div
+                          key={resource.id}
+                          className="border border-gray-200 rounded-lg p-4 flex items-center justify-between hover:bg-gray-50 transition"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-blue-100 rounded-lg">
+                              <FileText className="size-5 text-blue-600" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900">{resource.title}</p>
+                              <p className="text-sm text-gray-500">
+                                {resource.type.toUpperCase()} {resource.fileSizeLabel ? `• ${resource.fileSizeLabel}` : ""}
+                              </p>
+                            </div>
+                          </div>
+                          <a
+                            href={resource.fileUrl ?? "#"}
+                            className={`p-2 rounded-lg transition ${
+                              resource.fileUrl ? "hover:bg-gray-200" : "opacity-40 pointer-events-none"
+                            }`}
+                          >
+                            <Download className="size-5 text-gray-600" />
+                          </a>
                         </div>
-                        <div>
-                          <p className="font-medium text-gray-900">
-                            Конспект модуля 1
-                          </p>
-                          <p className="text-sm text-gray-500">PDF • 2.4 MB</p>
-                        </div>
-                      </div>
-                      <button className="p-2 hover:bg-gray-200 rounded-lg transition">
-                        <Download className="size-5 text-gray-600" />
-                      </button>
-                    </div>
-
-                    <div className="border border-gray-200 rounded-lg p-4 flex items-center justify-between hover:bg-gray-50 transition">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-purple-100 rounded-lg">
-                          <Code2 className="size-5 text-purple-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900">
-                            Примеры кода
-                          </p>
-                          <p className="text-sm text-gray-500">ZIP • 1.8 MB</p>
-                        </div>
-                      </div>
-                      <button className="p-2 hover:bg-gray-200 rounded-lg transition">
-                        <Download className="size-5 text-gray-600" />
-                      </button>
-                    </div>
-
-                    <div className="border border-gray-200 rounded-lg p-4 flex items-center justify-between hover:bg-gray-50 transition">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-green-100 rounded-lg">
-                          <FileText className="size-5 text-green-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900">
-                            Дополнительные материалы
-                          </p>
-                          <p className="text-sm text-gray-500">PDF • 3.1 MB</p>
-                        </div>
-                      </div>
-                      <button className="p-2 hover:bg-gray-200 rounded-lg transition">
-                        <Download className="size-5 text-gray-600" />
-                      </button>
-                    </div>
+                      ))
+                    ) : (
+                      <div className="text-gray-500">Материалы пока не добавлены.</div>
+                    )}
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Comments Section */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
               <div className="flex items-center gap-2 mb-6">
                 <MessageSquare className="size-5 text-gray-600" />
-                <h3 className="text-lg font-bold text-gray-900">
-                  Обсуждение
-                </h3>
-                <span className="text-sm text-gray-500">(24)</span>
+                <h3 className="text-lg font-bold text-gray-900">Обсуждение</h3>
+                <span className="text-sm text-gray-500">({comments.length})</span>
               </div>
 
               <div className="space-y-4">
-                <div className="flex gap-4">
-                  <div className="size-10 bg-gradient-to-br from-blue-400 to-purple-400 rounded-full shrink-0" />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-gray-900">
-                        Алексей Морозов
-                      </span>
-                      <span className="text-sm text-gray-500">2 дня назад</span>
+                {comments.length ? (
+                  comments.map((comment) => (
+                    <div key={comment.id} className="flex gap-4">
+                      <div className="size-10 bg-gradient-to-br from-blue-400 to-purple-400 rounded-full shrink-0 flex items-center justify-center text-white text-sm font-semibold">
+                        {comment.author.displayName.charAt(0)}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-semibold text-gray-900">
+                            {comment.author.displayName}
+                          </span>
+                          <span className="text-sm text-gray-500">
+                            {formatDateLabel(comment.createdAt)}
+                          </span>
+                        </div>
+                        <p className="text-gray-600">{comment.body}</p>
+                      </div>
                     </div>
-                    <p className="text-gray-600">
-                      Отличный курс! Все очень понятно объясняется. Особенно
-                      понравился модуль про React.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex gap-4">
-                  <div className="size-10 bg-gradient-to-br from-green-400 to-blue-400 rounded-full shrink-0" />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-gray-900">
-                        Мария Соколова
-                      </span>
-                      <span className="text-sm text-gray-500">5 дней назад</span>
-                    </div>
-                    <p className="text-gray-600">
-                      Спасибо за курс! Уже нашла первую работу благодаря
-                      полученным знаниям 🎉
-                    </p>
-                  </div>
-                </div>
+                  ))
+                ) : (
+                  <div className="text-gray-500">Комментариев пока нет.</div>
+                )}
               </div>
 
               <div className="mt-6 pt-6 border-t border-gray-200">
-                <textarea
-                  placeholder="Добавить комментарий..."
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none"
-                  rows={3}
-                />
-                <div className="flex justify-end mt-2">
-                  <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium">
-                    Отправить
-                  </button>
-                </div>
+                {session ? (
+                  <>
+                    <textarea
+                      value={commentBody}
+                      onChange={(event) => setCommentBody(event.target.value)}
+                      placeholder="Добавить комментарий..."
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none"
+                      rows={3}
+                    />
+                    <div className="flex justify-end mt-2">
+                      <button
+                        type="button"
+                        disabled={isSubmittingComment || !commentBody.trim()}
+                        onClick={handleSubmitComment}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-60"
+                      >
+                        {isSubmittingComment ? "Отправка..." : "Отправить"}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-sm text-gray-500">
+                    Чтобы писать комментарии и отмечать уроки, войдите в аккаунт.
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Sidebar */}
           <div className="space-y-6">
-            {/* Course Info */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-4">
                 Информация о курсе
@@ -447,7 +495,7 @@ export function Course() {
                   <div>
                     <p className="text-sm text-gray-500">Студентов</p>
                     <p className="font-semibold text-gray-900">
-                      {course.students.toLocaleString()}
+                      {course.studentsCount.toLocaleString("ru-RU")}
                     </p>
                   </div>
                 </div>
@@ -458,9 +506,7 @@ export function Course() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Длительность</p>
-                    <p className="font-semibold text-gray-900">
-                      {course.duration}
-                    </p>
+                    <p className="font-semibold text-gray-900">{course.duration}</p>
                   </div>
                 </div>
 
@@ -470,9 +516,7 @@ export function Course() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Рейтинг</p>
-                    <p className="font-semibold text-gray-900">
-                      {course.rating} / 5.0
-                    </p>
+                    <p className="font-semibold text-gray-900">{course.rating} / 5.0</p>
                   </div>
                 </div>
 
@@ -482,59 +526,61 @@ export function Course() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Сертификат</p>
-                    <p className="font-semibold text-gray-900">Да</p>
+                    <p className="font-semibold text-gray-900">
+                      {"certificateAvailable" in course && course.certificateAvailable ? "Да" : "Нет данных"}
+                    </p>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Instructor */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">
-                Преподаватель
-              </h3>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="size-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold">
-                  {course.instructor.charAt(0)}
+            {course.instructor && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">Преподаватель</h3>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="size-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold">
+                    {course.instructor.fullName.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900">{course.instructor.fullName}</p>
+                    <p className="text-sm text-gray-500">{course.instructor.title}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-semibold text-gray-900">
-                    {course.instructor}
-                  </p>
-                  <p className="text-sm text-gray-500">Senior Developer</p>
-                </div>
+                {course.instructor.bio && (
+                  <p className="text-sm text-gray-600 mb-4">{course.instructor.bio}</p>
+                )}
               </div>
-              <p className="text-sm text-gray-600 mb-4">
-                Опытный разработчик с 10+ летним стажем. Работал в крупных IT
-                компаниях и создал более 50 успешных проектов.
-              </p>
-              <button className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium">
-                Связаться
-              </button>
-            </div>
+            )}
 
-            {/* Progress */}
             <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl shadow-sm p-6 text-white">
-              <h3 className="text-lg font-bold mb-4">Ваш прогресс</h3>
-              <div className="mb-4">
-                <div className="flex justify-between text-sm mb-2">
-                  <span>Завершено</span>
-                  <span className="font-semibold">65%</span>
+              <h3 className="text-lg font-bold mb-4">
+                {progress ? "Ваш прогресс" : "Доступ к обучению"}
+              </h3>
+              {progress ? (
+                <>
+                  <div className="mb-4">
+                    <div className="flex justify-between text-sm mb-2">
+                      <span>Прогресс курса</span>
+                      <span>{progress.progressPercent}%</span>
+                    </div>
+                    <div className="h-2 bg-white/20 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-white rounded-full"
+                        style={{ width: `${progress.progressPercent}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2 text-sm text-blue-100">
+                    <div>Завершено уроков: {progress.completedLessons} из {progress.totalLessons}</div>
+                    <div>Следующий урок: {progress.nextLessonTitle ?? "Курс завершен"}</div>
+                    <div>Статус: {progress.status}</div>
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm text-blue-100">
+                  Авторизуйтесь и запишитесь на курс, чтобы видеть персональный прогресс.
                 </div>
-                <div className="h-2 bg-white/20 rounded-full overflow-hidden">
-                  <div className="h-full bg-white rounded-full w-[65%]" />
-                </div>
-              </div>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-blue-100">Уроков пройдено</span>
-                  <span className="font-semibold">78 / 120</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-blue-100">Осталось времени</span>
-                  <span className="font-semibold">2 месяца</span>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         </div>

@@ -1,11 +1,22 @@
 import { Module } from "@nestjs/common";
-import { CatalogModule } from "./services/catalog/catalog.module";
-import { IdentityAccessModule } from "./services/identity-access/identity-access.module";
-import { LearningModule } from "./services/learning/learning.module";
+import { TypeOrmModule } from "@nestjs/typeorm";
+import { CatalogModule } from "./modules/catalog/catalog.module";
+import { CommunityModule } from "./modules/community/community.module";
+import { IdentityAccessModule } from "./modules/identity-access/identity-access.module";
+import { LearningModule } from "./modules/learning/learning.module";
+import { getTypeOrmConfig } from "./core/config";
 import { HealthController } from "./health.controller";
 
 @Module({
-  imports: [IdentityAccessModule, CatalogModule, LearningModule],
+  imports: [
+    TypeOrmModule.forRootAsync({
+      useFactory: getTypeOrmConfig,
+    }),
+    IdentityAccessModule,
+    CatalogModule,
+    LearningModule,
+    CommunityModule,
+  ],
   controllers: [HealthController],
 })
 export class AppModule {}

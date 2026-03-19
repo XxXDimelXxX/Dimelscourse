@@ -11,6 +11,7 @@
     "dev:api": "npm run start:dev -w @dimelscourse/api",
     "build:web": "npm run build -w @dimelscourse/web",
     "build:api": "npm run build -w @dimelscourse/api",
-    "build": "npm run build:web && npm run build:api"
+    "build": "npm run build:web && npm run build:api",
+    "seed:api": "npm run seed -w @dimelscourse/api"
   }
 }

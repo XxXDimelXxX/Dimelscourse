@@ -1,4 +1,4 @@
-const DEFAULT_DB_PORT = 5432;
+const DEFAULT_DB_PORT = 5436;
 const DEFAULT_DB_SCHEMA = "public";
 
 export interface DatabaseConfig {
@@ -11,6 +11,8 @@ export interface DatabaseConfig {
   database: string;
   schema: string;
   ssl: boolean;
+  synchronize: boolean;
+  logging: boolean;
 }
 
 function toBoolean(value: string | undefined, defaultValue = false): boolean {
@@ -40,9 +42,11 @@ export function getDatabaseConfig(
   const port = Number(env.DB_PORT ?? DEFAULT_DB_PORT);
   const username = env.DB_USER ?? "postgres";
   const password = env.DB_PASSWORD ?? "postgres";
-  const database = env.DB_NAME ?? "dimelscourse";
+  const database = env.DB_NAME ?? "Dimel's course";
   const schema = env.DB_SCHEMA ?? DEFAULT_DB_SCHEMA;
   const ssl = toBoolean(env.DB_SSL, false);
+  const synchronize = toBoolean(env.DB_SYNCHRONIZE, false);
+  const logging = toBoolean(env.DB_LOGGING, false);
   const url =
     env.DATABASE_URL ??
     createDatabaseUrl({
@@ -64,5 +68,7 @@ export function getDatabaseConfig(
     database,
     schema,
     ssl,
+    synchronize,
+    logging,
   };
 }
