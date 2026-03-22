@@ -1,7 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
-import { mainCourse } from "../data/courseData";
+import {
+  createCheckout,
+  fetchDashboard,
+  fetchPublishedCourses,
+  processPaymentWebhook,
+  type CourseCard,
+} from "../lib/lms-api";
 import {
   Code2,
   Check,
@@ -10,42 +16,101 @@ import {
   CheckCircle2,
   XCircle,
   Calendar,
-  Infinity,
 } from "lucide-react";
 
 type PaymentStatus = "idle" | "processing" | "success" | "failed";
 
 export function Purchase() {
-  const { user, grantAccess } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const [course, setCourse] = useState<CourseCard | null>(null);
   const [paymentType, setPaymentType] = useState<"one-time" | "subscription">("one-time");
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("idle");
+  const [hasAccess, setHasAccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Mock payment processing
-  const handlePayment = () => {
-    setPaymentStatus("processing");
+  useEffect(() => {
+    void loadData();
+  }, [user]);
 
-    // Симулируем обработку платежа (в реале это будет API вызов)
-    setTimeout(() => {
-      // 90% успех, 10% ошибка для демо
-      const isSuccess = Math.random() > 0.1;
+  const loadData = async () => {
+    try {
+      setIsLoading(true);
+      setErrorMessage(null);
+      const courses = await fetchPublishedCourses();
+      const featuredCourse = courses[0] ?? null;
+      setCourse(featuredCourse);
 
-      if (isSuccess) {
-        setPaymentStatus("success");
-        // Выдаем доступ к курсу
-        grantAccess();
-
-        // Через 2 секунды редирект в курс
-        setTimeout(() => {
-          navigate("/course/fullstack-web-dev");
-        }, 2000);
+      if (user) {
+        const dashboard = await fetchDashboard(user.id);
+        setHasAccess(dashboard.courses.some((item) => item.courseSlug === featuredCourse?.slug));
       } else {
-        setPaymentStatus("failed");
+        setHasAccess(false);
       }
-    }, 2000);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Не удалось загрузить страницу оплаты",
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // Если пользователь не авторизован
+  const handlePayment = async () => {
+    if (!user || !course) {
+      return;
+    }
+
+    try {
+      setPaymentStatus("processing");
+      setErrorMessage(null);
+
+      const checkout = await createCheckout({
+        userId: user.id,
+        courseSlug: course.slug,
+        paymentType,
+        paymentMethodLabel:
+          paymentType === "one-time" ? "Visa •••• 4242" : "MasterCard •••• 5555",
+      });
+
+      if (checkout.accessGranted) {
+        setPaymentStatus("success");
+        setHasAccess(true);
+        window.setTimeout(() => {
+          navigate(`/course/${course.slug}`);
+        }, 1200);
+        return;
+      }
+
+      await new Promise((resolve) => window.setTimeout(resolve, 1500));
+      const isSuccess = Math.random() > 0.1;
+
+      const processed = await processPaymentWebhook({
+        paymentId: checkout.id,
+        status: isSuccess ? "success" : "failed",
+        eventId: `demo_${Date.now()}`,
+        failureReason: isSuccess ? undefined : "Провайдер не подтвердил оплату",
+      });
+
+      if (processed.status === "success") {
+        setPaymentStatus("success");
+        setHasAccess(true);
+        window.setTimeout(() => {
+          navigate(`/course/${course.slug}`);
+        }, 1200);
+      } else {
+        setPaymentStatus("failed");
+        setErrorMessage(processed.failureReason ?? "Не удалось обработать платеж");
+      }
+    } catch (error) {
+      setPaymentStatus("failed");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Не удалось обработать платеж",
+      );
+    }
+  };
+
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
@@ -70,8 +135,31 @@ export function Purchase() {
     );
   }
 
-  // Если у пользователя уже есть доступ
-  if (user.hasAccess) {
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8">
+        <div className="max-w-6xl mx-auto space-y-6">
+          <div className="h-16 rounded-xl bg-white border border-gray-100 animate-pulse" />
+          <div className="grid lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 h-[36rem] rounded-xl bg-white border border-gray-100 animate-pulse" />
+            <div className="h-[36rem] rounded-xl bg-white border border-gray-100 animate-pulse" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!course) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="bg-white rounded-xl shadow-sm border border-red-200 p-8 max-w-md w-full text-center text-red-700">
+          {errorMessage ?? "Курс не найден"}
+        </div>
+      </div>
+    );
+  }
+
+  if (hasAccess) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 max-w-md w-full text-center">
@@ -79,13 +167,13 @@ export function Purchase() {
             <CheckCircle2 className="size-8 text-green-600" />
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            У вас уже есть доступ!
+            У вас уже есть доступ
           </h2>
           <p className="text-gray-600 mb-6">
-            Вы уже приобрели этот курс. Приступайте к обучению!
+            Доступ к курсу уже активен. Можно сразу продолжать обучение.
           </p>
           <Link
-            to="/course/fullstack-web-dev"
+            to={`/course/${course.slug}`}
             className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
           >
             Перейти к курсу
@@ -97,7 +185,6 @@ export function Purchase() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      {/* Header */}
       <header className="bg-white/80 backdrop-blur-sm border-b sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <Link to="/" className="flex items-center gap-2">
@@ -110,7 +197,6 @@ export function Purchase() {
       </header>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {/* Payment Success */}
         {paymentStatus === "success" && (
           <div className="mb-8 bg-green-50 border border-green-200 rounded-xl p-6">
             <div className="flex items-center gap-4">
@@ -119,18 +205,17 @@ export function Purchase() {
               </div>
               <div>
                 <h3 className="font-bold text-green-900 text-lg mb-1">
-                  Оплата успешна!
+                  Оплата успешна
                 </h3>
                 <p className="text-green-700">
-                  Доступ к курсу открыт. Перенаправляем вас к обучению...
+                  Webhook подтвердил платеж и доступ к курсу уже открыт.
                 </p>
               </div>
             </div>
           </div>
         )}
 
-        {/* Payment Failed */}
-        {paymentStatus === "failed" && (
+        {(paymentStatus === "failed" || errorMessage) && (
           <div className="mb-8 bg-red-50 border border-red-200 rounded-xl p-6">
             <div className="flex items-center gap-4">
               <div className="size-12 bg-red-100 rounded-full flex items-center justify-center shrink-0">
@@ -141,8 +226,7 @@ export function Purchase() {
                   Ошибка оплаты
                 </h3>
                 <p className="text-red-700">
-                  Не удалось обработать платеж. Пожалуйста, попробуйте снова или
-                  свяжитесь с поддержкой.
+                  {errorMessage ?? "Не удалось обработать платеж. Попробуйте еще раз."}
                 </p>
               </div>
             </div>
@@ -150,30 +234,26 @@ export function Purchase() {
         )}
 
         <div className="grid lg:grid-cols-3 gap-8">
-          {/* Left: Payment Options */}
           <div className="lg:col-span-2 space-y-6">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2">
                 Выберите способ оплаты
               </h1>
               <p className="text-gray-600">
-                Получите полный доступ к курсу "{mainCourse.title}"
+                Получите доступ к курсу "{course.title}"
               </p>
             </div>
 
-            {/* Payment Type Selector */}
             <div className="grid md:grid-cols-2 gap-6">
-              {/* One-time Purchase */}
               <button
+                type="button"
                 onClick={() => setPaymentType("one-time")}
                 disabled={paymentStatus === "processing"}
                 className={`p-6 border-2 rounded-xl text-left transition ${
                   paymentType === "one-time"
                     ? "border-blue-600 bg-blue-50"
                     : "border-gray-200 bg-white hover:border-gray-300"
-                } ${
-                  paymentStatus === "processing" ? "opacity-50 cursor-not-allowed" : ""
-                }`}
+                } ${paymentStatus === "processing" ? "opacity-50 cursor-not-allowed" : ""}`}
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className="p-3 bg-blue-100 rounded-lg">
@@ -189,45 +269,25 @@ export function Purchase() {
                   Разовая оплата
                 </h3>
                 <div className="text-3xl font-bold text-blue-600 mb-2">
-                  ${mainCourse.price}
+                  ${course.priceUsd}
                 </div>
                 <p className="text-sm text-gray-600 mb-4">
                   Полный доступ к курсу навсегда
                 </p>
-                <ul className="space-y-2 text-sm text-gray-600">
-                  <li className="flex items-center gap-2">
-                    <Check className="size-4 text-green-500" />
-                    Все модули и уроки
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="size-4 text-green-500" />
-                    Бессрочный доступ
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="size-4 text-green-500" />
-                    Сертификат по окончании
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="size-4 text-green-500" />
-                    Поддержка 24/7
-                  </li>
-                </ul>
               </button>
 
-              {/* Subscription */}
               <button
+                type="button"
                 onClick={() => setPaymentType("subscription")}
                 disabled={paymentStatus === "processing"}
                 className={`p-6 border-2 rounded-xl text-left transition relative overflow-hidden ${
                   paymentType === "subscription"
                     ? "border-purple-600 bg-purple-50"
                     : "border-gray-200 bg-white hover:border-gray-300"
-                } ${
-                  paymentStatus === "processing" ? "opacity-50 cursor-not-allowed" : ""
-                }`}
+                } ${paymentStatus === "processing" ? "opacity-50 cursor-not-allowed" : ""}`}
               >
                 <div className="absolute top-4 right-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xs font-bold px-3 py-1 rounded-full">
-                  ПОПУЛЯРНО
+                  MVP
                 </div>
                 <div className="flex items-start justify-between mb-4">
                   <div className="p-3 bg-purple-100 rounded-lg">
@@ -244,102 +304,62 @@ export function Purchase() {
                 </h3>
                 <div className="flex items-baseline gap-2 mb-2">
                   <div className="text-3xl font-bold text-purple-600">
-                    ${mainCourse.subscriptionPrice}
+                    ${course.subscriptionPriceUsd}
                   </div>
                   <div className="text-gray-600">/месяц</div>
                 </div>
                 <p className="text-sm text-gray-600 mb-4">
-                  Гибкая оплата с доступом на период подписки
+                  Доступ активируется после подтверждения платежа webhook-ом
                 </p>
-                <ul className="space-y-2 text-sm text-gray-600">
-                  <li className="flex items-center gap-2">
-                    <Check className="size-4 text-green-500" />
-                    Все модули и уроки
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="size-4 text-green-500" />
-                    Доступ пока активна подписка
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="size-4 text-green-500" />
-                    Сертификат по окончании
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="size-4 text-green-500" />
-                    Отмена в любой момент
-                  </li>
-                </ul>
               </button>
             </div>
 
-            {/* Payment Form */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-4">
                 Платежные данные
               </h3>
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Номер карты
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="1234 5678 9012 3456"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                    disabled={paymentStatus === "processing"}
-                  />
-                </div>
-
+                <input
+                  type="text"
+                  placeholder="1234 5678 9012 3456"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                  disabled={paymentStatus === "processing"}
+                />
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Срок действия
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="MM/YY"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                      disabled={paymentStatus === "processing"}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      CVV
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="123"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                      disabled={paymentStatus === "processing"}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Имя владельца карты
-                  </label>
                   <input
                     type="text"
-                    placeholder="IVAN PETROV"
+                    placeholder="MM/YY"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    disabled={paymentStatus === "processing"}
+                  />
+                  <input
+                    type="text"
+                    placeholder="123"
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                     disabled={paymentStatus === "processing"}
                   />
                 </div>
+                <input
+                  type="text"
+                  placeholder="IVAN PETROV"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                  disabled={paymentStatus === "processing"}
+                />
 
                 <button
+                  type="button"
                   onClick={handlePayment}
                   disabled={paymentStatus === "processing" || paymentStatus === "success"}
                   className={`w-full py-4 rounded-lg font-medium flex items-center justify-center gap-2 transition ${
                     paymentStatus === "processing" || paymentStatus === "success"
-                      ? "bg-gray-400 cursor-not-allowed"
+                      ? "bg-gray-400 cursor-not-allowed text-white"
                       : "bg-gradient-to-r from-blue-600 to-purple-600 hover:shadow-lg text-white"
                   }`}
                 >
                   {paymentStatus === "processing" ? (
                     <>
                       <Loader2 className="size-5 animate-spin" />
-                      Обработка платежа...
+                      Создаем платеж и ждем webhook...
                     </>
                   ) : paymentStatus === "success" ? (
                     <>
@@ -350,64 +370,35 @@ export function Purchase() {
                     <>
                       Оплатить $
                       {paymentType === "one-time"
-                        ? mainCourse.price
-                        : mainCourse.subscriptionPrice}
+                        ? course.priceUsd
+                        : course.subscriptionPriceUsd}
                     </>
                   )}
                 </button>
-
-                <p className="text-xs text-gray-500 text-center">
-                  Нажимая "Оплатить", вы соглашаетесь с условиями использования и
-                  политикой конфиденциальности
-                </p>
               </div>
             </div>
           </div>
 
-          {/* Right: Order Summary */}
           <div>
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 sticky top-24">
               <h3 className="text-lg font-bold text-gray-900 mb-4">
                 Итого к оплате
               </h3>
-
               <div className="space-y-4 mb-6">
                 <div>
                   <p className="font-medium text-gray-900 mb-1">
-                    {mainCourse.title}
+                    {course.title}
                   </p>
                   <p className="text-sm text-gray-600">
-                    {paymentType === "one-time"
-                      ? "Разовая оплата"
-                      : "Ежемесячная подписка"}
+                    {paymentType === "one-time" ? "Разовая оплата" : "Ежемесячная подписка"}
                   </p>
                 </div>
-
-                <div className="border-t border-gray-200 pt-4">
-                  <div className="flex justify-between mb-2">
-                    <span className="text-gray-600">Цена курса:</span>
-                    <span className="font-medium">
-                      $
-                      {paymentType === "one-time"
-                        ? mainCourse.price
-                        : mainCourse.subscriptionPrice}
-                    </span>
-                  </div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-gray-600">Скидка:</span>
-                    <span className="font-medium text-green-600">$0</span>
-                  </div>
-                </div>
-
                 <div className="border-t border-gray-200 pt-4">
                   <div className="flex justify-between items-baseline">
                     <span className="font-bold text-gray-900">Итого:</span>
                     <div className="text-right">
                       <div className="text-3xl font-bold text-blue-600">
-                        $
-                        {paymentType === "one-time"
-                          ? mainCourse.price
-                          : mainCourse.subscriptionPrice}
+                        ${paymentType === "one-time" ? course.priceUsd : course.subscriptionPriceUsd}
                       </div>
                       {paymentType === "subscription" && (
                         <div className="text-sm text-gray-600">/месяц</div>
@@ -417,26 +408,8 @@ export function Purchase() {
                 </div>
               </div>
 
-              <div className="space-y-3 text-sm text-gray-600">
-                <div className="flex items-start gap-2">
-                  <Check className="size-4 text-green-500 shrink-0 mt-0.5" />
-                  <span>
-                    {paymentType === "one-time" ? "Бессрочный" : "Полный"} доступ
-                    ко всем материалам
-                  </span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <Check className="size-4 text-green-500 shrink-0 mt-0.5" />
-                  <span>Поддержка преподавателя</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <Check className="size-4 text-green-500 shrink-0 mt-0.5" />
-                  <span>Сертификат об окончании</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <Check className="size-4 text-green-500 shrink-0 mt-0.5" />
-                  <span>Доступ к сообществу студентов</span>
-                </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-900">
+                После оплаты backend получает webhook, меняет статус платежа и автоматически выдает доступ к курсу.
               </div>
             </div>
           </div>

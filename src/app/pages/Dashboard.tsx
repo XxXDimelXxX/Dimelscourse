@@ -1,6 +1,5 @@
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { useAuth } from "../context/AuthContext";
-import { mainCourse, getTotalLessons, getLessonByIndex } from "../data/courseData";
 import {
   BookOpen,
   Code2,
@@ -14,42 +13,82 @@ import {
   PlayCircle,
   CheckCircle2,
   Trophy,
-  Lock,
   ShoppingCart,
-  ArrowRight,
 } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import {
+  fetchDashboard,
+  fetchPublishedCourses,
+  type CourseCard,
+  type DashboardResponse,
+} from "../lib/lms-api";
+
+function formatDateLabel(value: string): string {
+  return new Date(value).toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 export function Dashboard() {
-  const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
+  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  const [featuredCourse, setFeaturedCourse] = useState<CourseCard | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Если не авторизован, редирект на главную
+  useEffect(() => {
+    if (!user) {
+      navigate("/", { replace: true });
+      return;
+    }
+
+    void loadData(user.id);
+  }, [navigate, user]);
+
+  const loadData = async (userId: string) => {
+    try {
+      setIsLoading(true);
+      setErrorMessage(null);
+      const [nextDashboard, courses] = await Promise.all([
+        fetchDashboard(userId),
+        fetchPublishedCourses(),
+      ]);
+      setDashboard(nextDashboard);
+      setFeaturedCourse(courses[0] ?? null);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Не удалось загрузить дашборд",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   if (!user) {
-    navigate("/");
     return null;
   }
 
-  const totalLessons = getTotalLessons();
-  const currentLesson = getLessonByIndex(user.currentLesson);
+  const handleLogout = () => {
+    logout();
+    navigate("/", { replace: true });
+  };
 
-  const achievements = [
-    { icon: "🏆", title: "Первый урок", description: "Начал обучение", unlocked: user.completedLessons.length > 0 },
-    { icon: "🔥", title: "Неделя подряд", description: "7 дней активности", unlocked: user.completedLessons.length >= 5 },
-    { icon: "⭐", title: "10 уроков", description: "Пройдено 10 уроков", unlocked: user.completedLessons.length >= 10 },
-    { icon: "💎", title: "Половина пути", description: "50% курса", unlocked: user.progress >= 50 },
-  ];
+  const hasAccess = Boolean(dashboard?.courses.length);
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white border-b sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <Link to="/" className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <Code2 className="size-8 text-blue-600" />
             <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
               Dimel's School
             </h1>
-          </Link>
+          </div>
 
           <div className="flex items-center gap-4">
             {user.role === "admin" && (
@@ -64,10 +103,8 @@ export function Dashboard() {
               <Settings className="size-5 text-gray-600" />
             </button>
             <button
-              onClick={() => {
-                logout();
-                navigate("/");
-              }}
+              type="button"
+              onClick={handleLogout}
               className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
             >
               <LogOut className="size-4" />
@@ -78,59 +115,47 @@ export function Dashboard() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section */}
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-2">
-            Добро пожаловать, {user.name}! 👋
+            Добро пожаловать, {dashboard?.profile.displayName ?? user.displayName}! 👋
           </h2>
           <p className="text-gray-600">
-            {user.hasAccess
+            {hasAccess
               ? "Продолжай обучение и достигай новых высот"
-              : "Приобрети курс и начни своё путешествие в мир программирования"}
+              : "Получи доступ к курсу и начни проходить MVP от первого урока до админки"}
           </p>
         </div>
 
-        {/* No Access State */}
-        {!user.hasAccess && (
+        {errorMessage && (
+          <div className="mb-8 rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-red-700">
+            {errorMessage}
+          </div>
+        )}
+
+        {!isLoading && !hasAccess && featuredCourse && (
           <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl shadow-xl p-8 mb-8 text-white">
             <div className="max-w-3xl">
               <div className="flex items-center gap-2 mb-4">
-                <Lock className="size-6" />
+                <ShoppingCart className="size-6" />
                 <span className="text-sm font-medium bg-white/20 px-3 py-1 rounded-full">
-                  Доступ закрыт
+                  Доступ еще не открыт
                 </span>
               </div>
               <h3 className="text-3xl font-bold mb-4">
-                {mainCourse.title}
+                {featuredCourse.title}
               </h3>
               <p className="text-blue-100 mb-6 text-lg">
-                {mainCourse.description}
+                {featuredCourse.summary}
               </p>
-              <div className="flex flex-wrap items-center gap-4 mb-6">
-                <div className="flex items-center gap-2">
-                  <BookOpen className="size-5" />
-                  <span>{totalLessons} уроков</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Clock className="size-5" />
-                  <span>{mainCourse.duration}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Award className="size-5" />
-                  <span>Сертификат</span>
-                </div>
-              </div>
               <div className="flex flex-wrap gap-4">
                 <Link
                   to="/purchase"
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-white text-blue-600 rounded-lg hover:bg-blue-50 transition font-medium group"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-white text-blue-600 rounded-lg hover:bg-blue-50 transition font-medium"
                 >
-                  <ShoppingCart className="size-5" />
-                  Купить курс от ${mainCourse.subscriptionPrice}/мес
-                  <ArrowRight className="size-4 group-hover:translate-x-1 transition" />
+                  Купить курс
                 </Link>
                 <Link
-                  to={`/course/${mainCourse.id}`}
+                  to={`/course/${featuredCourse.slug}`}
                   className="inline-flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 transition border border-white/30 rounded-lg font-medium"
                 >
                   Посмотреть программу
@@ -140,10 +165,17 @@ export function Dashboard() {
           </div>
         )}
 
-        {/* Has Access - Stats and Course */}
-        {user.hasAccess && (
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div
+                key={index}
+                className="h-36 rounded-xl border border-gray-200 bg-white animate-pulse"
+              />
+            ))}
+          </div>
+        ) : (
           <>
-            {/* Stats Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <div className="flex items-center justify-between mb-4">
@@ -153,9 +185,9 @@ export function Dashboard() {
                   <TrendingUp className="size-5 text-green-500" />
                 </div>
                 <div className="text-3xl font-bold text-gray-900 mb-1">
-                  {user.progress}%
+                  {dashboard?.stats.activeCourses ?? 0}
                 </div>
-                <div className="text-sm text-gray-600">Прогресс курса</div>
+                <div className="text-sm text-gray-600">Активных курса</div>
               </div>
 
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
@@ -166,7 +198,7 @@ export function Dashboard() {
                   <TrendingUp className="size-5 text-green-500" />
                 </div>
                 <div className="text-3xl font-bold text-gray-900 mb-1">
-                  {user.completedLessons.length}
+                  {dashboard?.stats.completedLessons ?? 0}
                 </div>
                 <div className="text-sm text-gray-600">Уроков завершено</div>
               </div>
@@ -179,9 +211,9 @@ export function Dashboard() {
                   <TrendingUp className="size-5 text-green-500" />
                 </div>
                 <div className="text-3xl font-bold text-gray-900 mb-1">
-                  {totalLessons - user.completedLessons.length}
+                  {dashboard?.stats.studyHours ?? 0}
                 </div>
-                <div className="text-sm text-gray-600">Уроков осталось</div>
+                <div className="text-sm text-gray-600">Часов обучения</div>
               </div>
 
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
@@ -192,191 +224,194 @@ export function Dashboard() {
                   <TrendingUp className="size-5 text-green-500" />
                 </div>
                 <div className="text-3xl font-bold text-gray-900 mb-1">
-                  {achievements.filter(a => a.unlocked).length}
+                  {dashboard?.stats.achievements ?? 0}
                 </div>
                 <div className="text-sm text-gray-600">Достижений</div>
               </div>
             </div>
 
             <div className="grid lg:grid-cols-3 gap-8">
-              {/* Main Content */}
               <div className="lg:col-span-2 space-y-6">
-                {/* My Course */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                   <h3 className="text-xl font-bold text-gray-900 mb-6">
-                    Мой курс
+                    Мои курсы
                   </h3>
-                  <div className="border border-gray-200 rounded-lg p-5 hover:shadow-md transition">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <h4 className="font-semibold text-gray-900 mb-1">
-                          {mainCourse.title}
-                        </h4>
-                        <p className="text-sm text-gray-600">
-                          {user.completedLessons.length} из {totalLessons} уроков
-                        </p>
-                      </div>
-                      {user.progress === 100 ? (
-                        <div className="flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium">
-                          <CheckCircle2 className="size-4" />
-                          Завершен
-                        </div>
-                      ) : (
-                        <div className="text-right">
-                          <div className="text-2xl font-bold text-blue-600">
-                            {user.progress}%
+                  <div className="space-y-4">
+                    {dashboard?.courses.length ? (
+                      dashboard.courses.map((course) => (
+                        <div
+                          key={course.enrollmentId}
+                          className="border border-gray-200 rounded-lg p-5 hover:shadow-md transition"
+                        >
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-gray-900 mb-1">
+                                {course.title}
+                              </h4>
+                              <p className="text-sm text-gray-600">
+                                {course.completedLessons} из {course.totalLessons} уроков • {course.timeLeft ?? "В процессе"}
+                              </p>
+                            </div>
+                            {course.progress === 100 ? (
+                              <div className="flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium">
+                                <CheckCircle2 className="size-4" />
+                                Завершен
+                              </div>
+                            ) : (
+                              <div className="text-right">
+                                <div className="text-2xl font-bold text-blue-600">
+                                  {course.progress}%
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="mb-4">
+                            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full ${
+                                  course.progress === 100 ? "bg-green-500" : "bg-blue-600"
+                                } transition-all duration-300`}
+                                style={{ width: `${course.progress}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-sm text-gray-600">
+                              <PlayCircle className="size-4" />
+                              {course.nextLesson ?? "Нет следующего урока"}
+                            </div>
+                            <Link
+                              to={`/course/${course.courseSlug}`}
+                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium"
+                            >
+                              {course.progress === 100 ? "Повторить" : "Продолжить"}
+                            </Link>
                           </div>
                         </div>
-                      )}
-                    </div>
-
-                    {/* Progress Bar */}
-                    <div className="mb-4">
-                      <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full ${
-                            user.progress === 100
-                              ? "bg-green-500"
-                              : "bg-blue-600"
-                          } transition-all duration-300`}
-                          style={{ width: `${user.progress}%` }}
-                        />
+                      ))
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center text-gray-500">
+                        У вас пока нет активного доступа к курсу.
                       </div>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <PlayCircle className="size-4" />
-                        {currentLesson
-                          ? `Следующий: ${currentLesson.title}`
-                          : "Начните первый урок"}
-                      </div>
-                      <Link
-                        to={`/course/${mainCourse.id}`}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium"
-                      >
-                        {user.progress === 0 ? "Начать" : user.progress === 100 ? "Повторить" : "Продолжить"}
-                      </Link>
-                    </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Recent Activity */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                   <h3 className="text-xl font-bold text-gray-900 mb-6">
                     Недавняя активность
                   </h3>
-                  {user.completedLessons.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      <BookOpen className="size-12 mx-auto mb-3 text-gray-300" />
-                      <p>Пока нет активности</p>
-                      <p className="text-sm mt-1">Начните проходить уроки!</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {user.completedLessons.slice(-3).reverse().map((lessonIndex) => {
-                        const lesson = getLessonByIndex(lessonIndex);
-                        return lesson ? (
-                          <div key={lessonIndex} className="flex items-start gap-4">
-                            <div className="p-2 bg-green-100 rounded-lg shrink-0">
-                              <CheckCircle2 className="size-5 text-green-600" />
-                            </div>
-                            <div className="flex-1">
-                              <p className="text-gray-900 font-medium">
-                                Урок завершен: "{lesson.title}"
-                              </p>
-                              <p className="text-sm text-gray-500">Недавно</p>
-                            </div>
+                  <div className="space-y-4">
+                    {dashboard?.recentActivity.length ? (
+                      dashboard.recentActivity.map((activity) => (
+                        <div key={activity.id} className="flex items-start gap-4">
+                          <div className="p-2 bg-blue-100 rounded-lg shrink-0">
+                            <Award className="size-5 text-blue-600" />
                           </div>
-                        ) : null;
-                      })}
-                    </div>
-                  )}
+                          <div className="flex-1">
+                            <p className="text-gray-900 font-medium">
+                              {activity.title}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              {formatDateLabel(activity.createdAt)}
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-gray-500">Активность пока не зафиксирована.</div>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Sidebar */}
               <div className="space-y-6">
-                {/* Profile Card */}
                 <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl shadow-sm p-6 text-white">
                   <div className="flex items-center gap-4 mb-6">
                     <div className="size-16 bg-white/20 rounded-full flex items-center justify-center">
                       <User className="size-8" />
                     </div>
                     <div>
-                      <h4 className="font-bold text-lg">{user.name}</h4>
-                      <p className="text-blue-100 text-sm">{user.email}</p>
+                      <h4 className="font-bold text-lg">
+                        {dashboard?.profile.displayName ?? user.displayName}
+                      </h4>
+                      <p className="text-blue-100 text-sm">
+                        {dashboard?.profile.email ?? user.email}
+                      </p>
                     </div>
                   </div>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-blue-100">Статус</span>
-                      <span className="font-semibold">
-                        {user.role === "admin" ? "Администратор" : "Студент"}
-                      </span>
+                      <span className="text-blue-100">Роль</span>
+                      <span className="font-semibold">{dashboard?.profile.role ?? user.role}</span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-blue-100">Доступ к курсу</span>
-                      <span className="font-semibold">
-                        {user.hasAccess ? "Активен" : "Нет доступа"}
-                      </span>
+                      <span className="text-blue-100">ID пользователя</span>
+                      <span className="font-semibold text-xs">{user.id.slice(0, 8)}</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Achievements */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                   <h3 className="text-lg font-bold text-gray-900 mb-4">
                     Достижения
                   </h3>
                   <div className="grid grid-cols-2 gap-3">
-                    {achievements.map((achievement, index) => (
-                      <div
-                        key={index}
-                        className={`border rounded-lg p-3 text-center transition ${
-                          achievement.unlocked
-                            ? "border-blue-300 bg-blue-50"
-                            : "border-gray-200 opacity-50"
-                        }`}
-                      >
-                        <div className="text-3xl mb-2">{achievement.icon}</div>
-                        <div className="text-xs font-semibold text-gray-900 mb-1">
-                          {achievement.title}
+                    {dashboard?.achievements.length ? (
+                      dashboard.achievements.map((achievement) => (
+                        <div
+                          key={achievement.id}
+                          className="border border-gray-200 rounded-lg p-3 text-center hover:border-blue-300 transition"
+                        >
+                          <div className="text-3xl mb-2">{achievement.icon ?? "🏆"}</div>
+                          <div className="text-xs font-semibold text-gray-900 mb-1">
+                            {achievement.title}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {achievement.description}
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-500">
-                          {achievement.description}
-                        </div>
+                      ))
+                    ) : (
+                      <div className="col-span-2 text-sm text-gray-500">
+                        Достижения пока не начислены.
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
 
-                {/* Next Steps */}
-                {user.hasAccess && (
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                    <h3 className="text-lg font-bold text-gray-900 mb-4">
-                      Следующие шаги
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold text-gray-900">
+                      Учебный план
                     </h3>
-                    <div className="space-y-3">
-                      {currentLesson && (
-                        <Link
-                          to={`/course/${mainCourse.id}`}
-                          className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg hover:bg-blue-100 transition"
-                        >
-                          <PlayCircle className="size-5 text-blue-600" />
+                    <Calendar className="size-5 text-gray-400" />
+                  </div>
+                  <div className="space-y-3">
+                    {dashboard?.studyPlan.length ? (
+                      dashboard.studyPlan.map((item) => (
+                        <div key={item.id} className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
+                          <div className="text-center">
+                            <div className="text-xs text-blue-600 font-semibold">
+                              {item.weekday}
+                            </div>
+                            <div className="text-lg font-bold text-blue-600">{item.dayOfMonth}</div>
+                          </div>
                           <div className="flex-1">
                             <p className="text-sm font-medium text-gray-900">
-                              {currentLesson.title}
+                              {item.title}
                             </p>
-                            <p className="text-xs text-gray-500">
-                              {currentLesson.duration}
-                            </p>
+                            <p className="text-xs text-gray-500">{item.timeRange}</p>
                           </div>
-                        </Link>
-                      )}
-                    </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-sm text-gray-500">Учебный план пока не заполнен.</div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             </div>
           </>

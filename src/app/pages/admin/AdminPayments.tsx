@@ -1,129 +1,72 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search, CheckCircle, XCircle, Clock, DollarSign, Calendar, Filter } from "lucide-react";
-
-interface MockPayment {
-  id: string;
-  userId: string;
-  userEmail: string;
-  userName: string;
-  amount: number;
-  type: "one-time" | "subscription";
-  status: "success" | "pending" | "failed";
-  date: string;
-  paymentMethod: string;
-  transactionId: string;
-}
+import { fetchAdminPayments, type AdminPayment } from "../../lib/lms-api";
 
 export function AdminPayments() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "success" | "pending" | "failed">("all");
+  const [payments, setPayments] = useState<AdminPayment[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Mock данные оплат
-  const payments: MockPayment[] = [
-    {
-      id: "1",
-      userId: "1",
-      userName: "Иван Петров",
-      userEmail: "ivan@test.com",
-      amount: 299,
-      type: "one-time",
-      status: "success",
-      date: "2026-03-22 14:30",
-      paymentMethod: "Visa •••• 4242",
-      transactionId: "ch_3MtwBw2eZvKYlo2C0mYjZ3fX",
-    },
-    {
-      id: "2",
-      userId: "2",
-      userName: "Мария Смирнова",
-      userEmail: "maria@test.com",
-      amount: 59,
-      type: "subscription",
-      status: "success",
-      date: "2026-03-22 10:15",
-      paymentMethod: "MasterCard •••• 5555",
-      transactionId: "ch_3MtwBw2eZvKYlo2C0mYjZ3fY",
-    },
-    {
-      id: "3",
-      userId: "3",
-      userName: "Алексей Козлов",
-      userEmail: "alex@test.com",
-      amount: 299,
-      type: "one-time",
-      status: "failed",
-      date: "2026-03-21 18:45",
-      paymentMethod: "Visa •••• 1234",
-      transactionId: "ch_3MtwBw2eZvKYlo2C0mYjZ3fZ",
-    },
-    {
-      id: "4",
-      userId: "4",
-      userName: "Ольга Новикова",
-      userEmail: "olga@test.com",
-      amount: 59,
-      type: "subscription",
-      status: "pending",
-      date: "2026-03-21 16:20",
-      paymentMethod: "Visa •••• 9876",
-      transactionId: "ch_3MtwBw2eZvKYlo2C0mYjZ3gA",
-    },
-    {
-      id: "5",
-      userId: "5",
-      userName: "Дмитрий Соколов",
-      userEmail: "dmitry@test.com",
-      amount: 299,
-      type: "one-time",
-      status: "success",
-      date: "2026-03-20 12:00",
-      paymentMethod: "MasterCard •••• 8888",
-      transactionId: "ch_3MtwBw2eZvKYlo2C0mYjZ3gB",
-    },
-    {
-      id: "6",
-      userId: "2",
-      userName: "Мария Смирнова",
-      userEmail: "maria@test.com",
-      amount: 59,
-      type: "subscription",
-      status: "success",
-      date: "2026-02-22 10:15",
-      paymentMethod: "MasterCard •••• 5555",
-      transactionId: "ch_3MtwBw2eZvKYlo2C0mYjZ3gC",
-    },
-  ];
+  useEffect(() => {
+    void loadPayments();
+  }, []);
 
-  const filteredPayments = payments.filter((payment) => {
-    const matchesSearch =
-      payment.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      payment.userEmail.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      payment.transactionId.toLowerCase().includes(searchQuery.toLowerCase());
+  const loadPayments = async () => {
+    try {
+      setIsLoading(true);
+      setErrorMessage(null);
+      const nextPayments = await fetchAdminPayments();
+      setPayments(nextPayments);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Не удалось загрузить платежи",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-    const matchesStatus =
-      statusFilter === "all" || payment.status === statusFilter;
+  const filteredPayments = useMemo(
+    () =>
+      payments.filter((payment) => {
+        const matchesSearch =
+          payment.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          payment.userEmail.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          payment.transactionId.toLowerCase().includes(searchQuery.toLowerCase());
 
-    return matchesSearch && matchesStatus;
-  });
+        const matchesStatus =
+          statusFilter === "all" || payment.status === statusFilter;
+
+        return matchesSearch && matchesStatus;
+      }),
+    [payments, searchQuery, statusFilter],
+  );
 
   const totalRevenue = payments
-    .filter((p) => p.status === "success")
-    .reduce((sum, p) => sum + p.amount, 0);
+    .filter((payment) => payment.status === "success")
+    .reduce((sum, payment) => sum + payment.amount, 0);
 
   const pendingAmount = payments
-    .filter((p) => p.status === "pending")
-    .reduce((sum, p) => sum + p.amount, 0);
+    .filter((payment) => payment.status === "pending")
+    .reduce((sum, payment) => sum + payment.amount, 0);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Платежи</h1>
         <p className="text-gray-600">
-          История платежей и управление транзакциями
+          История платежей и статусы webhook-подтверждений
         </p>
       </div>
 
-      {/* Stats */}
+      {errorMessage && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-red-700">
+          {errorMessage}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="text-2xl font-bold text-gray-900">
@@ -145,13 +88,12 @@ export function AdminPayments() {
         </div>
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="text-2xl font-bold text-red-600">
-            {payments.filter((p) => p.status === "failed").length}
+            {payments.filter((payment) => payment.status === "failed").length}
           </div>
           <div className="text-sm text-gray-600">Отклоненные</div>
         </div>
       </div>
 
-      {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <div className="grid md:grid-cols-2 gap-4">
           <div className="relative">
@@ -169,7 +111,7 @@ export function AdminPayments() {
             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-gray-400" />
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
+              onChange={(e) => setStatusFilter(e.target.value as "all" | "success" | "pending" | "failed")}
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none appearance-none bg-white"
             >
               <option value="all">Все статусы</option>
@@ -181,7 +123,6 @@ export function AdminPayments() {
         </div>
       </div>
 
-      {/* Payments Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -276,39 +217,21 @@ export function AdminPayments() {
           </table>
         </div>
 
-        {filteredPayments.length === 0 && (
+        {!isLoading && filteredPayments.length === 0 && (
           <div className="text-center py-12 text-gray-500">
             <p>Платежи не найдены</p>
           </div>
         )}
       </div>
 
-      {/* Webhook Info */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
         <h3 className="font-bold text-blue-900 mb-2">
           Информация о webhooks
         </h3>
-        <p className="text-sm text-blue-800 mb-4">
-          Статусы платежей обновляются автоматически через webhooks от платежного
-          провайдера. При успешной оплате пользователю автоматически выдается доступ
-          к курсу.
+        <p className="text-sm text-blue-800">
+          При успешной оплате webhook автоматически переводит платеж в `success`
+          и выдает пользователю доступ к курсу через enrollment.
         </p>
-        <div className="bg-white rounded-lg p-4 space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-gray-600">Success webhook:</span>
-            <span className="text-green-600 font-medium">→ Выдача доступа</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-600">Pending webhook:</span>
-            <span className="text-yellow-600 font-medium">
-              → Ожидание подтверждения
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-600">Failed webhook:</span>
-            <span className="text-red-600 font-medium">→ Уведомление пользователю</span>
-          </div>
-        </div>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation, useNavigate } from "react-router";
+import { Link, Navigate, Outlet, useLocation, useNavigate } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import {
   Code2,
@@ -17,8 +17,7 @@ export function AdminLayout() {
 
   // Проверка доступа админа
   if (!user || user.role !== "admin") {
-    navigate("/dashboard");
-    return null;
+    return <Navigate to="/dashboard" replace />;
   }
 
   const navItems = [

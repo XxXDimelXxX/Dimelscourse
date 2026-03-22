@@ -1,20 +1,107 @@
-import { useState } from "react";
-import { mainCourse } from "../../data/courseData";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Plus,
   Edit2,
-  Trash2,
   Save,
   X,
-  GripVertical,
   BookOpen,
   PlayCircle,
 } from "lucide-react";
+import {
+  fetchAdminCourse,
+  updateAdminCourse,
+  type AdminCourseResponse,
+} from "../../lib/lms-api";
+
+const COURSE_SLUG = "fullstack-web-dev";
 
 export function AdminCourse() {
   const [isEditing, setIsEditing] = useState(false);
-  const [editingModuleId, setEditingModuleId] = useState<number | null>(null);
-  const [editingLessonId, setEditingLessonId] = useState<number | null>(null);
+  const [course, setCourse] = useState<AdminCourseResponse | null>(null);
+  const [formState, setFormState] = useState({
+    title: "",
+    instructorName: "",
+    priceUsd: 0,
+    subscriptionPriceUsd: 0,
+    description: "",
+  });
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    void loadCourse();
+  }, []);
+
+  const loadCourse = async () => {
+    try {
+      setIsLoading(true);
+      setErrorMessage(null);
+      setSuccessMessage(null);
+      const nextCourse = await fetchAdminCourse(COURSE_SLUG);
+      setCourse(nextCourse);
+      setFormState({
+        title: nextCourse.title,
+        instructorName: nextCourse.instructorName,
+        priceUsd: nextCourse.priceUsd,
+        subscriptionPriceUsd: nextCourse.subscriptionPriceUsd,
+        description: nextCourse.description ?? "",
+      });
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Не удалось загрузить курс",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const totalLessons = useMemo(
+    () => course?.modules.reduce((acc, module) => acc + module.lessons.length, 0) ?? 0,
+    [course],
+  );
+
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      setErrorMessage(null);
+      setSuccessMessage(null);
+      const updatedCourse = await updateAdminCourse(COURSE_SLUG, formState);
+      setCourse(updatedCourse);
+      setFormState({
+        title: updatedCourse.title,
+        instructorName: updatedCourse.instructorName,
+        priceUsd: updatedCourse.priceUsd,
+        subscriptionPriceUsd: updatedCourse.subscriptionPriceUsd,
+        description: updatedCourse.description ?? "",
+      });
+      setIsEditing(false);
+      setSuccessMessage("Изменения сохранены");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Не удалось сохранить курс",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="h-16 rounded-xl bg-white border border-gray-100 animate-pulse" />
+        <div className="h-80 rounded-xl bg-white border border-gray-100 animate-pulse" />
+      </div>
+    );
+  }
+
+  if (!course) {
+    return (
+      <div className="rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-red-700">
+        {errorMessage ?? "Курс не найден"}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -28,7 +115,10 @@ export function AdminCourse() {
           </p>
         </div>
         <button
-          onClick={() => setIsEditing(!isEditing)}
+          onClick={() => {
+            setIsEditing((value) => !value);
+            setSuccessMessage(null);
+          }}
           className={`px-4 py-2 rounded-lg font-medium transition ${
             isEditing
               ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
@@ -49,7 +139,18 @@ export function AdminCourse() {
         </button>
       </div>
 
-      {/* Course Info */}
+      {errorMessage && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-red-700">
+          {errorMessage}
+        </div>
+      )}
+
+      {successMessage && (
+        <div className="rounded-xl border border-green-200 bg-green-50 px-5 py-4 text-green-700">
+          {successMessage}
+        </div>
+      )}
+
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <h2 className="text-xl font-bold text-gray-900 mb-4">
           Информация о курсе
@@ -61,8 +162,11 @@ export function AdminCourse() {
             </label>
             <input
               type="text"
-              defaultValue={mainCourse.title}
+              value={formState.title}
               disabled={!isEditing}
+              onChange={(event) =>
+                setFormState((current) => ({ ...current, title: event.target.value }))
+              }
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:bg-gray-50 disabled:text-gray-500"
             />
           </div>
@@ -73,8 +177,11 @@ export function AdminCourse() {
             </label>
             <input
               type="text"
-              defaultValue={mainCourse.instructor}
+              value={formState.instructorName}
               disabled={!isEditing}
+              onChange={(event) =>
+                setFormState((current) => ({ ...current, instructorName: event.target.value }))
+              }
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:bg-gray-50 disabled:text-gray-500"
             />
           </div>
@@ -83,34 +190,36 @@ export function AdminCourse() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Цена (разовая)
             </label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
-                $
-              </span>
-              <input
-                type="number"
-                defaultValue={mainCourse.price}
-                disabled={!isEditing}
-                className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:bg-gray-50 disabled:text-gray-500"
-              />
-            </div>
+            <input
+              type="number"
+              value={formState.priceUsd}
+              disabled={!isEditing}
+              onChange={(event) =>
+                setFormState((current) => ({
+                  ...current,
+                  priceUsd: Number(event.target.value || 0),
+                }))
+              }
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:bg-gray-50 disabled:text-gray-500"
+            />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Цена (подписка/мес)
             </label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
-                $
-              </span>
-              <input
-                type="number"
-                defaultValue={mainCourse.subscriptionPrice}
-                disabled={!isEditing}
-                className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:bg-gray-50 disabled:text-gray-500"
-              />
-            </div>
+            <input
+              type="number"
+              value={formState.subscriptionPriceUsd}
+              disabled={!isEditing}
+              onChange={(event) =>
+                setFormState((current) => ({
+                  ...current,
+                  subscriptionPriceUsd: Number(event.target.value || 0),
+                }))
+              }
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:bg-gray-50 disabled:text-gray-500"
+            />
           </div>
 
           <div className="md:col-span-2">
@@ -118,9 +227,15 @@ export function AdminCourse() {
               Описание курса
             </label>
             <textarea
-              defaultValue={mainCourse.description}
+              value={formState.description}
               disabled={!isEditing}
               rows={3}
+              onChange={(event) =>
+                setFormState((current) => ({
+                  ...current,
+                  description: event.target.value,
+                }))
+              }
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:bg-gray-50 disabled:text-gray-500 resize-none"
             />
           </div>
@@ -128,12 +243,27 @@ export function AdminCourse() {
 
         {isEditing && (
           <div className="mt-6 flex gap-3">
-            <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSaving}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium disabled:opacity-60"
+            >
               <Save className="size-4 inline mr-2" />
-              Сохранить изменения
+              {isSaving ? "Сохраняем..." : "Сохранить изменения"}
             </button>
             <button
-              onClick={() => setIsEditing(false)}
+              type="button"
+              onClick={() => {
+                setIsEditing(false);
+                setFormState({
+                  title: course.title,
+                  instructorName: course.instructorName,
+                  priceUsd: course.priceUsd,
+                  subscriptionPriceUsd: course.subscriptionPriceUsd,
+                  description: course.description ?? "",
+                });
+              }}
               className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-medium"
             >
               Отмена
@@ -142,150 +272,59 @@ export function AdminCourse() {
         )}
       </div>
 
-      {/* Course Structure */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-gray-900">
-            Структура курса
-          </h2>
-          {isEditing && (
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium">
-              <Plus className="size-4 inline mr-2" />
-              Добавить модуль
-            </button>
-          )}
-        </div>
+        <h2 className="text-xl font-bold text-gray-900 mb-6">
+          Структура курса
+        </h2>
 
         <div className="space-y-4">
-          {mainCourse.modules.map((module, moduleIndex) => (
+          {course.modules.map((module) => (
             <div
               key={module.id}
               className="border border-gray-200 rounded-lg overflow-hidden"
             >
-              {/* Module Header */}
               <div className="bg-gray-50 p-4 flex items-center gap-3 border-b border-gray-200">
-                {isEditing && (
-                  <button className="cursor-grab hover:bg-gray-200 p-1 rounded">
-                    <GripVertical className="size-5 text-gray-400" />
-                  </button>
-                )}
                 <div className="p-2 bg-blue-100 rounded-lg">
                   <BookOpen className="size-5 text-blue-600" />
                 </div>
                 <div className="flex-1">
-                  {editingModuleId === module.id ? (
-                    <input
-                      type="text"
-                      defaultValue={module.title}
-                      className="w-full px-3 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                      autoFocus
-                    />
-                  ) : (
-                    <h3 className="font-semibold text-gray-900">
-                      {module.title}
-                    </h3>
-                  )}
+                  <h3 className="font-semibold text-gray-900">
+                    {module.title}
+                  </h3>
                   <p className="text-sm text-gray-500">
                     {module.lessons.length} уроков
                   </p>
                 </div>
-                {isEditing && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() =>
-                        setEditingModuleId(
-                          editingModuleId === module.id ? null : module.id
-                        )
-                      }
-                      className="p-2 hover:bg-gray-200 rounded-lg transition"
-                    >
-                      <Edit2 className="size-4 text-gray-600" />
-                    </button>
-                    <button className="p-2 hover:bg-red-100 rounded-lg transition">
-                      <Trash2 className="size-4 text-red-600" />
-                    </button>
-                  </div>
-                )}
               </div>
 
-              {/* Lessons */}
               <div className="divide-y divide-gray-200">
                 {module.lessons.map((lesson) => (
                   <div
                     key={lesson.id}
                     className="p-4 flex items-center gap-3 hover:bg-gray-50 transition"
                   >
-                    {isEditing && (
-                      <button className="cursor-grab hover:bg-gray-200 p-1 rounded">
-                        <GripVertical className="size-4 text-gray-400" />
-                      </button>
-                    )}
                     <div className="p-2 bg-purple-100 rounded-lg">
                       <PlayCircle className="size-4 text-purple-600" />
                     </div>
                     <div className="flex-1">
-                      {editingLessonId === lesson.id ? (
-                        <div className="space-y-2">
-                          <input
-                            type="text"
-                            defaultValue={lesson.title}
-                            className="w-full px-3 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
-                            autoFocus
-                          />
-                          <input
-                            type="text"
-                            defaultValue={lesson.description}
-                            className="w-full px-3 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
-                            placeholder="Описание урока"
-                          />
-                        </div>
-                      ) : (
-                        <>
-                          <p className="font-medium text-gray-900">
-                            {lesson.title}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            {lesson.description}
-                          </p>
-                        </>
-                      )}
+                      <p className="font-medium text-gray-900">
+                        {lesson.title}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {lesson.description}
+                      </p>
                     </div>
                     <div className="text-sm text-gray-500">
                       {lesson.duration}
                     </div>
-                    {isEditing && (
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() =>
-                            setEditingLessonId(
-                              editingLessonId === lesson.id ? null : lesson.id
-                            )
-                          }
-                          className="p-2 hover:bg-gray-200 rounded-lg transition"
-                        >
-                          <Edit2 className="size-4 text-gray-600" />
-                        </button>
-                        <button className="p-2 hover:bg-red-100 rounded-lg transition">
-                          <Trash2 className="size-4 text-red-600" />
-                        </button>
-                      </div>
-                    )}
                   </div>
                 ))}
-
-                {isEditing && (
-                  <button className="w-full p-4 text-left text-sm text-blue-600 hover:bg-blue-50 transition font-medium">
-                    <Plus className="size-4 inline mr-2" />
-                    Добавить урок в "{module.title}"
-                  </button>
-                )}
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Statistics */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <h2 className="text-xl font-bold text-gray-900 mb-4">
           Статистика курса
@@ -293,44 +332,23 @@ export function AdminCourse() {
         <div className="grid md:grid-cols-3 gap-6">
           <div>
             <div className="text-3xl font-bold text-gray-900 mb-1">
-              {mainCourse.modules.length}
+              {course.modules.length}
             </div>
             <div className="text-sm text-gray-600">Модулей в курсе</div>
           </div>
           <div>
             <div className="text-3xl font-bold text-gray-900 mb-1">
-              {mainCourse.modules.reduce(
-                (acc, m) => acc + m.lessons.length,
-                0
-              )}
+              {totalLessons}
             </div>
             <div className="text-sm text-gray-600">Всего уроков</div>
           </div>
           <div>
             <div className="text-3xl font-bold text-gray-900 mb-1">
-              ~{mainCourse.duration}
+              ~{course.duration}
             </div>
             <div className="text-sm text-gray-600">Длительность</div>
           </div>
         </div>
-      </div>
-
-      {/* Info Panel */}
-      <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
-        <h3 className="font-bold text-yellow-900 mb-2">
-          Информация для MVP
-        </h3>
-        <p className="text-sm text-yellow-800">
-          Это упрощенная версия управления курсом для MVP. В полноценной версии
-          здесь будет:
-        </p>
-        <ul className="mt-3 space-y-1 text-sm text-yellow-800 list-disc list-inside">
-          <li>Drag & drop для изменения порядка модулей и уроков</li>
-          <li>Загрузка видео для каждого урока</li>
-          <li>Загрузка дополнительных материалов (PDF, файлы)</li>
-          <li>Тесты и задания к урокам</li>
-          <li>Предпросмотр урока перед публикацией</li>
-        </ul>
       </div>
     </div>
   );

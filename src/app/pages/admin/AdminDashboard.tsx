@@ -1,27 +1,38 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { Users, DollarSign, BookOpen, TrendingUp, CheckCircle, XCircle } from "lucide-react";
+import { fetchAdminOverview, type AdminOverviewResponse } from "../../lib/lms-api";
 
 export function AdminDashboard() {
-  // Mock данные для админки
-  const stats = {
-    totalUsers: 142,
-    activeSubscriptions: 89,
-    totalRevenue: 15680,
-    completionRate: 67,
+  const [overview, setOverview] = useState<AdminOverviewResponse | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    void loadOverview();
+  }, []);
+
+  const loadOverview = async () => {
+    try {
+      setIsLoading(true);
+      setErrorMessage(null);
+      const nextOverview = await fetchAdminOverview();
+      setOverview(nextOverview);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Не удалось загрузить админ-панель",
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const recentPayments = [
-    { id: "1", user: "ivan@test.com", amount: 299, type: "one-time", status: "success", date: "2026-03-20" },
-    { id: "2", user: "maria@test.com", amount: 59, type: "subscription", status: "success", date: "2026-03-20" },
-    { id: "3", user: "alex@test.com", amount: 299, type: "one-time", status: "failed", date: "2026-03-19" },
-    { id: "4", user: "olga@test.com", amount: 59, type: "subscription", status: "pending", date: "2026-03-19" },
-  ];
-
-  const recentUsers = [
-    { id: "1", name: "Иван Петров", email: "ivan@test.com", hasAccess: true, progress: 45, joined: "2026-03-15" },
-    { id: "2", name: "Мария Смирнова", email: "maria@test.com", hasAccess: true, progress: 78, joined: "2026-03-10" },
-    { id: "3", name: "Алексей Козлов", email: "alex@test.com", hasAccess: false, progress: 0, joined: "2026-03-19" },
-  ];
+  const stats = overview?.stats ?? {
+    totalUsers: 0,
+    activeSubscriptions: 0,
+    totalRevenue: 0,
+    completionRate: 0,
+  };
 
   return (
     <div className="space-y-8">
@@ -34,7 +45,12 @@ export function AdminDashboard() {
         </p>
       </div>
 
-      {/* Stats Cards */}
+      {errorMessage && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-red-700">
+          {errorMessage}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between mb-4">
@@ -85,106 +101,119 @@ export function AdminDashboard() {
           <div className="text-3xl font-bold text-gray-900 mb-1">
             {stats.completionRate}%
           </div>
-          <div className="text-sm text-gray-600">Процент завершения</div>
+          <div className="text-sm text-gray-600">Средний прогресс</div>
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-8">
-        {/* Recent Payments */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-gray-900">Последние оплаты</h2>
-            <Link
-              to="/admin/payments"
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-            >
-              Смотреть все
-            </Link>
-          </div>
-          <div className="space-y-3">
-            {recentPayments.map((payment) => (
-              <div
-                key={payment.id}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-              >
-                <div className="flex-1">
-                  <p className="font-medium text-gray-900">{payment.user}</p>
-                  <p className="text-sm text-gray-500">
-                    {payment.type === "one-time" ? "Разовая оплата" : "Подписка"} •{" "}
-                    {payment.date}
-                  </p>
-                </div>
-                <div className="text-right flex items-center gap-3">
-                  <span className="font-bold text-gray-900">
-                    ${payment.amount}
-                  </span>
-                  {payment.status === "success" && (
-                    <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded">
-                      Успешно
-                    </span>
-                  )}
-                  {payment.status === "failed" && (
-                    <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-medium rounded">
-                      Ошибка
-                    </span>
-                  )}
-                  {payment.status === "pending" && (
-                    <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-medium rounded">
-                      В обработке
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+      {isLoading ? (
+        <div className="grid lg:grid-cols-2 gap-8">
+          <div className="h-72 rounded-xl border border-gray-200 bg-white animate-pulse" />
+          <div className="h-72 rounded-xl border border-gray-200 bg-white animate-pulse" />
         </div>
-
-        {/* Recent Users */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-gray-900">Новые пользователи</h2>
-            <Link
-              to="/admin/users"
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-            >
-              Смотреть все
-            </Link>
-          </div>
-          <div className="space-y-3">
-            {recentUsers.map((user) => (
-              <div
-                key={user.id}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+      ) : (
+        <div className="grid lg:grid-cols-2 gap-8">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-900">Последние оплаты</h2>
+              <Link
+                to="/admin/payments"
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
               >
-                <div className="flex items-center gap-3">
-                  <div className="size-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold">
-                    {user.name.charAt(0)}
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{user.name}</p>
-                    <p className="text-sm text-gray-500">{user.email}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  {user.hasAccess ? (
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="size-4 text-green-600" />
-                      <span className="text-sm font-medium text-green-600">
-                        {user.progress}%
+                Смотреть все
+              </Link>
+            </div>
+            <div className="space-y-3">
+              {overview?.recentPayments.length ? (
+                overview.recentPayments.map((payment) => (
+                  <div
+                    key={payment.id}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                  >
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900">{payment.user}</p>
+                      <p className="text-sm text-gray-500">
+                        {payment.type === "one-time" ? "Разовая оплата" : "Подписка"} •{" "}
+                        {new Date(payment.date).toLocaleDateString("ru-RU")}
+                      </p>
+                    </div>
+                    <div className="text-right flex items-center gap-3">
+                      <span className="font-bold text-gray-900">
+                        ${payment.amount}
                       </span>
+                      {payment.status === "success" && (
+                        <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded">
+                          Успешно
+                        </span>
+                      )}
+                      {payment.status === "failed" && (
+                        <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-medium rounded">
+                          Ошибка
+                        </span>
+                      )}
+                      {payment.status === "pending" && (
+                        <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-medium rounded">
+                          В обработке
+                        </span>
+                      )}
                     </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <XCircle className="size-4 text-gray-400" />
-                      <span className="text-sm text-gray-500">Нет доступа</span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-sm text-gray-500">Оплат пока нет.</div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-900">Новые пользователи</h2>
+              <Link
+                to="/admin/users"
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              >
+                Смотреть все
+              </Link>
+            </div>
+            <div className="space-y-3">
+              {overview?.recentUsers.length ? (
+                overview.recentUsers.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="size-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold">
+                        {item.name.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{item.name}</p>
+                        <p className="text-sm text-gray-500">{item.email}</p>
+                      </div>
                     </div>
-                  )}
-                </div>
-              </div>
-            ))}
+                    <div className="text-right">
+                      {item.hasAccess ? (
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="size-4 text-green-600" />
+                          <span className="text-sm font-medium text-green-600">
+                            {item.progress}%
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <XCircle className="size-4 text-gray-400" />
+                          <span className="text-sm text-gray-500">Нет доступа</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-sm text-gray-500">Пользователей пока нет.</div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

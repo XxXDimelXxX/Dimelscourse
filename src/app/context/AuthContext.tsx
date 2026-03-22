@@ -1,110 +1,47 @@
 import { createContext, useContext, useState, ReactNode } from "react";
-
-export type UserRole = "student" | "admin" | null;
-
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  role: UserRole;
-  hasAccess: boolean; // доступ к курсу
-  currentLesson: number; // индекс текущего урока
-  completedLessons: number[]; // массив индексов завершенных уроков
-  progress: number; // процент прогресса
-}
+import {
+  clearAuthSession,
+  getAuthSession,
+  loginUser,
+  registerUser,
+  saveAuthSession,
+  type AuthUser,
+} from "../lib/auth";
 
 interface AuthContextType {
-  user: User | null;
-  login: (email: string, password: string) => void;
+  user: AuthUser | null;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => void;
-  register: (name: string, email: string, password: string) => void;
-  grantAccess: () => void; // выдача доступа после оплаты
-  completeLesson: (lessonIndex: number) => void;
-  updateCurrentLesson: (lessonIndex: number) => void;
+  register: (name: string, email: string, password: string) => Promise<void>;
+  refreshUser: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    // Проверяем localStorage для персистентности
-    const savedUser = localStorage.getItem("user");
-    if (savedUser) {
-      return JSON.parse(savedUser);
-    }
-    return null;
-  });
+  const [user, setUser] = useState<AuthUser | null>(() => getAuthSession()?.user ?? null);
 
-  const login = (email: string, password: string) => {
-    // Mock login - в реальности здесь будет API вызов
-    // Для демо: admin@test.com = admin, остальные = student
-    const isAdmin = email === "admin@test.com";
-    const newUser: User = {
-      id: Math.random().toString(36).substr(2, 9),
-      email,
-      name: email.split("@")[0],
-      role: isAdmin ? "admin" : "student",
-      hasAccess: isAdmin, // админ всегда имеет доступ
-      currentLesson: 0,
-      completedLessons: [],
-      progress: 0,
-    };
-    setUser(newUser);
-    localStorage.setItem("user", JSON.stringify(newUser));
+  const login = async (email: string, password: string) => {
+    const session = await loginUser({ email, password });
+    saveAuthSession(session);
+    setUser(session.user);
   };
 
-  const register = (name: string, email: string, password: string) => {
-    // Mock register
-    const newUser: User = {
-      id: Math.random().toString(36).substr(2, 9),
+  const register = async (name: string, email: string, password: string) => {
+    await registerUser({
       email,
-      name,
-      role: "student",
-      hasAccess: false, // по умолчанию нет доступа
-      currentLesson: 0,
-      completedLessons: [],
-      progress: 0,
-    };
-    setUser(newUser);
-    localStorage.setItem("user", JSON.stringify(newUser));
+      displayName: name,
+      password,
+    });
   };
 
   const logout = () => {
+    clearAuthSession();
     setUser(null);
-    localStorage.removeItem("user");
   };
 
-  const grantAccess = () => {
-    if (user) {
-      const updatedUser = { ...user, hasAccess: true };
-      setUser(updatedUser);
-      localStorage.setItem("user", JSON.stringify(updatedUser));
-    }
-  };
-
-  const completeLesson = (lessonIndex: number) => {
-    if (user && !user.completedLessons.includes(lessonIndex)) {
-      const completedLessons = [...user.completedLessons, lessonIndex];
-      const totalLessons = 16; // всего уроков в курсе
-      const progress = Math.round((completedLessons.length / totalLessons) * 100);
-      
-      const updatedUser = {
-        ...user,
-        completedLessons,
-        progress,
-        currentLesson: lessonIndex + 1, // переходим к следующему
-      };
-      setUser(updatedUser);
-      localStorage.setItem("user", JSON.stringify(updatedUser));
-    }
-  };
-
-  const updateCurrentLesson = (lessonIndex: number) => {
-    if (user) {
-      const updatedUser = { ...user, currentLesson: lessonIndex };
-      setUser(updatedUser);
-      localStorage.setItem("user", JSON.stringify(updatedUser));
-    }
+  const refreshUser = () => {
+    setUser(getAuthSession()?.user ?? null);
   };
 
   return (
@@ -114,9 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         register,
-        grantAccess,
-        completeLesson,
-        updateCurrentLesson,
+        refreshUser,
       }}
     >
       {children}
