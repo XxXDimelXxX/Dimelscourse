@@ -1,7 +1,14 @@
 import { createBrowserRouter } from "react-router";
 import { Home } from "./pages/Home";
 import { Dashboard } from "./pages/Dashboard";
-import { Course } from "./pages/Course";
+import { CourseView } from "./pages/CourseView";
+import { Purchase } from "./pages/Purchase";
+import { NotFound } from "./pages/NotFound";
+import { AdminLayout } from "./pages/admin/AdminLayout";
+import { AdminDashboard } from "./pages/admin/AdminDashboard";
+import { AdminUsers } from "./pages/admin/AdminUsers";
+import { AdminPayments } from "./pages/admin/AdminPayments";
+import { AdminCourse } from "./pages/admin/AdminCourse";
 
 export const router = createBrowserRouter([
   {
@@ -14,6 +21,36 @@ export const router = createBrowserRouter([
   },
   {
     path: "/course/:courseId",
-    Component: Course,
+    Component: CourseView,
+  },
+  {
+    path: "/purchase",
+    Component: Purchase,
+  },
+  {
+    path: "/admin",
+    Component: AdminLayout,
+    children: [
+      {
+        index: true,
+        Component: AdminDashboard,
+      },
+      {
+        path: "users",
+        Component: AdminUsers,
+      },
+      {
+        path: "payments",
+        Component: AdminPayments,
+      },
+      {
+        path: "course",
+        Component: AdminCourse,
+      },
+    ],
+  },
+  {
+    path: "*",
+    Component: NotFound,
   },
 ]);

@@ -1,15 +1,40 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
+import { useAuth } from "../context/AuthContext";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 import { BookOpen, Code2, Users, Award, ArrowRight, CheckCircle } from "lucide-react";
 
 export function Home() {
-  const [isLoginMode, setIsLoginMode] = useState(true);
+  const { user, login, register } = useAuth();
   const navigate = useNavigate();
+  const [isLoginMode, setIsLoginMode] = useState(true);
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
+
+  // Если пользователь уже авторизован, редирект в dashboard
+  if (user) {
+    navigate("/dashboard");
+    return null;
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // В реальном приложении здесь была бы аутентификация
+    
+    if (isLoginMode) {
+      login(formData.email, formData.password);
+    } else {
+      // Простая валидация для демо
+      if (formData.password !== formData.confirmPassword) {
+        alert("Пароли не совпадают");
+        return;
+      }
+      register(formData.name, formData.email, formData.password);
+    }
+    
     navigate("/dashboard");
   };
 
@@ -133,6 +158,8 @@ export function Home() {
                     required
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                     placeholder="Ваше имя"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   />
                 </div>
               )}
@@ -146,6 +173,8 @@ export function Home() {
                   required
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                   placeholder="example@email.com"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 />
               </div>
 
@@ -158,6 +187,8 @@ export function Home() {
                   required
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                   placeholder="••••••••"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 />
               </div>
 
@@ -171,6 +202,8 @@ export function Home() {
                     required
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                     placeholder="••••••••"
+                    value={formData.confirmPassword}
+                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                   />
                 </div>
               )}
