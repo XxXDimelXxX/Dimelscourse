@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search, CheckCircle, XCircle, Mail, Calendar, TrendingUp } from "lucide-react";
+import { getErrorMessage } from "../../lib/formatters";
 import {
   fetchAdminUsers,
   toggleAdminUserAccess,
@@ -25,7 +26,7 @@ export function AdminUsers() {
       setUsers(nextUsers);
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Не удалось загрузить пользователей",
+        getErrorMessage(error, "Не удалось загрузить пользователей"),
       );
     } finally {
       setIsLoading(false);
@@ -52,7 +53,7 @@ export function AdminUsers() {
       await loadUsers();
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Не удалось обновить доступ",
+        getErrorMessage(error, "Не удалось обновить доступ"),
       );
     } finally {
       setPendingUserId(null);

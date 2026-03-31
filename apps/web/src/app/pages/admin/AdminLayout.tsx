@@ -16,7 +16,7 @@ export function AdminLayout() {
   const navigate = useNavigate();
 
   // Проверка доступа админа
-  if (!user || user.role !== "admin") {
+  if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -37,9 +37,9 @@ export function AdminLayout() {
       label: "Платежи",
     },
     {
-      path: "/admin/course",
+      path: "/admin/courses",
       icon: BookOpen,
-      label: "Курс",
+      label: "Курсы",
     },
   ];
 

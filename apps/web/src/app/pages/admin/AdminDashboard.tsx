@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { Users, DollarSign, BookOpen, TrendingUp, CheckCircle, XCircle } from "lucide-react";
+import { getErrorMessage } from "../../lib/formatters";
 import { fetchAdminOverview, type AdminOverviewResponse } from "../../lib/lms-api";
 
 export function AdminDashboard() {
@@ -20,7 +21,7 @@ export function AdminDashboard() {
       setOverview(nextOverview);
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Не удалось загрузить админ-панель",
+        getErrorMessage(error, "Не удалось загрузить админ-панель"),
       );
     } finally {
       setIsLoading(false);

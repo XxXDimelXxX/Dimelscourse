@@ -76,6 +76,7 @@ export class CoursesService {
           title: courseModule.title,
           position: courseModule.position,
           lessons: [...(courseModule.lessons ?? [])]
+            .filter((lesson) => !lesson.isDraft)
             .sort((left, right) => left.position - right.position)
             .map((lesson) => ({
               id: lesson.id,
@@ -86,6 +87,7 @@ export class CoursesService {
               isPreview: lesson.isPreview,
               isLockedByDefault: lesson.isLockedByDefault,
               position: lesson.position,
+              hasVideo: Boolean(lesson.videoS3Key),
             })),
         })),
       resources: [...(course.resources ?? [])]

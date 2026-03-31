@@ -14,10 +14,14 @@ import { EnrollmentEntity } from "../../learning/entities/enrollment.entity";
 import { StudyPlanItemEntity } from "../../learning/entities/study-plan-item.entity";
 import { CourseCommentEntity } from "../../community/entities/course-comment.entity";
 import { PaymentEntity } from "../../payments/entities/payment.entity";
+import { CourseEntity } from "../../catalog/entities/course.entity";
+import { AuthIdentityEntity } from "./auth-identity.entity";
+import { RefreshSessionEntity } from "./refresh-session.entity";
 
 export enum UserRole {
   STUDENT = "student",
   ADMIN = "admin",
+  SUPERADMIN = "superadmin",
   INSTRUCTOR = "instructor",
 }
 
@@ -28,9 +32,6 @@ export class UserEntity {
 
   @Column({ unique: true, length: 255 })
   email!: string;
-
-  @Column({ name: "password_hash", select: false })
-  passwordHash!: string;
 
   @Column({ name: "display_name", length: 120 })
   displayName!: string;
@@ -47,6 +48,9 @@ export class UserEntity {
 
   @Column({ name: "avatar_url", type: "varchar", nullable: true })
   avatarUrl!: string | null;
+
+  @OneToMany(() => CourseEntity, (course) => course.createdBy)
+  createdCourses!: CourseEntity[];
 
   @OneToMany(() => EnrollmentEntity, (enrollment) => enrollment.user)
   enrollments!: EnrollmentEntity[];
@@ -65,6 +69,12 @@ export class UserEntity {
 
   @OneToMany(() => PaymentEntity, (payment) => payment.user)
   payments!: PaymentEntity[];
+
+  @OneToMany(() => AuthIdentityEntity, (identity) => identity.user)
+  authIdentities!: AuthIdentityEntity[];
+
+  @OneToMany(() => RefreshSessionEntity, (session) => session.user)
+  refreshSessions!: RefreshSessionEntity[];
 
   @CreateDateColumn({ name: "created_at" })
   createdAt!: Date;

@@ -1,4 +1,5 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3000";
+import { requestJson } from "./api-client";
+import { authorizedRequest } from "./auth";
 
 export interface CourseCard {
   id: string;
@@ -104,6 +105,7 @@ export interface CourseDetailsResponse {
       isPreview: boolean;
       isLockedByDefault: boolean;
       position: number;
+      hasVideo: boolean;
     }>;
   }>;
   resources: Array<{
@@ -154,6 +156,7 @@ export interface CourseWorkspaceResponse {
         completed: boolean;
         locked: boolean;
         completedAt: string | null;
+        videoUrl: string | null;
       }>;
     }>;
     resources: Array<{
@@ -264,81 +267,44 @@ export interface AdminCourseResponse {
     lessons: Array<{
       id: string;
       title: string;
+      videoOriginalName: string | null;
       description: string | null;
       duration: string;
     }>;
   }>;
 }
 
-async function request<TResponse>(
-  path: string,
-  init?: RequestInit,
-): Promise<TResponse> {
-  const response = await fetch(`${API_URL}${path}`, init);
-
-  if (!response.ok) {
-    const message = await extractErrorMessage(response);
-    throw new Error(message);
-  }
-
-  if (response.status === 204) {
-    return undefined as TResponse;
-  }
-
-  return response.json() as Promise<TResponse>;
-}
-
-async function extractErrorMessage(response: Response): Promise<string> {
-  try {
-    const payload = (await response.json()) as {
-      message?: string | string[];
-      error?: string;
-    };
-
-    if (Array.isArray(payload.message)) {
-      return payload.message.join(", ");
-    }
-
-    return payload.message ?? payload.error ?? "Request failed";
-  } catch {
-    return "Request failed";
-  }
-}
-
 export function fetchPublishedCourses(): Promise<CourseCard[]> {
-  return request<CourseCard[]>("/courses");
+  return requestJson<CourseCard[]>("/courses");
 }
 
-export function fetchDashboard(userId: string): Promise<DashboardResponse> {
-  return request<DashboardResponse>(
-    `/me/dashboard?userId=${encodeURIComponent(userId)}`,
-  );
+export function fetchDashboard(): Promise<DashboardResponse> {
+  return authorizedRequest<DashboardResponse>("/me/dashboard");
 }
 
 export function fetchCourseDetails(slug: string): Promise<CourseDetailsResponse> {
-  return request<CourseDetailsResponse>(`/courses/${encodeURIComponent(slug)}`);
+  return requestJson<CourseDetailsResponse>(`/courses/${encodeURIComponent(slug)}`);
 }
 
 export function fetchCourseWorkspace(
   slug: string,
-  userId: string,
 ): Promise<CourseWorkspaceResponse> {
-  return request<CourseWorkspaceResponse>(
-    `/me/courses/${encodeURIComponent(slug)}?userId=${encodeURIComponent(userId)}`,
+  return authorizedRequest<CourseWorkspaceResponse>(
+    `/me/courses/${encodeURIComponent(slug)}`,
   );
 }
 
 export function fetchCourseComments(slug: string): Promise<CourseComment[]> {
-  return request<CourseComment[]>(
+  return requestJson<CourseComment[]>(
     `/courses/${encodeURIComponent(slug)}/comments`,
   );
 }
 
 export function createCourseComment(
   slug: string,
-  payload: { userId: string; body: string },
+  payload: { body: string },
 ): Promise<void> {
-  return request<void>(`/courses/${encodeURIComponent(slug)}/comments`, {
+  return authorizedRequest<void>(`/courses/${encodeURIComponent(slug)}/comments`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -350,7 +316,6 @@ export function createCourseComment(
 export function completeLesson(
   slug: string,
   lessonId: string,
-  userId: string,
 ): Promise<{
   enrollmentId: string;
   lessonId: string;
@@ -360,8 +325,8 @@ export function completeLesson(
   nextLessonTitle: string | null;
   status: string;
 }> {
-  return request(
-    `/me/courses/${encodeURIComponent(slug)}/lessons/${encodeURIComponent(lessonId)}/complete?userId=${encodeURIComponent(userId)}`,
+  return authorizedRequest(
+    `/me/courses/${encodeURIComponent(slug)}/lessons/${encodeURIComponent(lessonId)}/complete`,
     {
       method: "PATCH",
     },
@@ -369,12 +334,11 @@ export function completeLesson(
 }
 
 export function createCheckout(payload: {
-  userId: string;
   courseSlug: string;
   paymentType: "one-time" | "subscription";
   paymentMethodLabel?: string;
 }): Promise<PaymentResponse> {
-  return request<PaymentResponse>("/payments/checkout", {
+  return authorizedRequest<PaymentResponse>("/payments/checkout", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -389,7 +353,7 @@ export function processPaymentWebhook(payload: {
   eventId?: string;
   failureReason?: string;
 }): Promise<PaymentResponse> {
-  return request<PaymentResponse>("/webhooks/payments", {
+  return requestJson<PaymentResponse>("/webhooks/payments", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -399,18 +363,18 @@ export function processPaymentWebhook(payload: {
 }
 
 export function fetchAdminOverview(): Promise<AdminOverviewResponse> {
-  return request<AdminOverviewResponse>("/admin/overview");
+  return authorizedRequest<AdminOverviewResponse>("/admin/overview");
 }
 
 export function fetchAdminUsers(): Promise<AdminUser[]> {
-  return request<AdminUser[]>("/admin/users");
+  return authorizedRequest<AdminUser[]>("/admin/users");
 }
 
 export function toggleAdminUserAccess(
   userId: string,
   payload: { grant: boolean; courseSlug?: string },
 ): Promise<{ success: boolean }> {
-  return request<{ success: boolean }>(
+  return authorizedRequest<{ success: boolean }>(
     `/admin/users/${encodeURIComponent(userId)}/access`,
     {
       method: "PATCH",
@@ -423,11 +387,11 @@ export function toggleAdminUserAccess(
 }
 
 export function fetchAdminPayments(): Promise<AdminPayment[]> {
-  return request<AdminPayment[]>("/admin/payments");
+  return authorizedRequest<AdminPayment[]>("/admin/payments");
 }
 
 export function fetchAdminCourse(slug: string): Promise<AdminCourseResponse> {
-  return request<AdminCourseResponse>(`/admin/course/${encodeURIComponent(slug)}`);
+  return authorizedRequest<AdminCourseResponse>(`/admin/course/${encodeURIComponent(slug)}`);
 }
 
 export function updateAdminCourse(
@@ -440,11 +404,382 @@ export function updateAdminCourse(
     instructorName?: string;
   },
 ): Promise<AdminCourseResponse> {
-  return request<AdminCourseResponse>(`/admin/course/${encodeURIComponent(slug)}`, {
+  return authorizedRequest<AdminCourseResponse>(`/admin/course/${encodeURIComponent(slug)}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
   });
+}
+
+// --- Video upload ---
+
+export interface VideoUploadUrlResponse {
+  uploadUrl: string;
+  videoS3Key: string;
+}
+
+export function requestVideoUploadUrl(
+  lessonId: string,
+  payload: { fileName: string; contentType: string; fileSize: number },
+): Promise<VideoUploadUrlResponse> {
+  return authorizedRequest<VideoUploadUrlResponse>(
+    `/admin/lessons/${encodeURIComponent(lessonId)}/video/upload-url`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function confirmVideoUpload(
+  lessonId: string,
+  payload: { videoS3Key: string; originalName: string; fileSize: number },
+): Promise<{ success: boolean }> {
+  return authorizedRequest<{ success: boolean }>(
+    `/admin/lessons/${encodeURIComponent(lessonId)}/video/confirm`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function deleteLessonVideo(
+  lessonId: string,
+): Promise<{ success: boolean }> {
+  return authorizedRequest<{ success: boolean }>(
+    `/admin/lessons/${encodeURIComponent(lessonId)}/video`,
+    { method: "DELETE" },
+  );
+}
+
+// ── Admin Courses CRUD ──
+
+export interface AdminCourseListItem {
+  id: string;
+  slug: string;
+  title: string;
+  summary: string;
+  level: string;
+  priceUsd: number;
+  isPublished: boolean;
+  previewImageUrl: string | null;
+  lessonCount: number;
+  studentsCount: number;
+  instructorName: string | null;
+  createdAt: string;
+}
+
+export interface AdminCourseDetail {
+  id: string;
+  slug: string;
+  title: string;
+  summary: string;
+  description: string | null;
+  level: string;
+  priceUsd: number;
+  isPublished: boolean;
+  previewImageUrl: string | null;
+  instructorName: string | null;
+  createdById: string | null;
+}
+
+export interface AdminModuleItem {
+  id: string;
+  title: string;
+  position: number;
+  lessons: AdminLessonItem[];
+}
+
+export interface AdminLessonItem {
+  id: string;
+  title: string;
+  slug: string;
+  summary: string | null;
+  durationMinutes: number;
+  position: number;
+  isPreview: boolean;
+  isLockedByDefault: boolean;
+  isDraft: boolean;
+  hasVideo: boolean;
+  videoOriginalName: string | null;
+  hasContent: boolean;
+  content?: string | null;
+}
+
+export interface AdminCourseStructure {
+  courseId: string;
+  courseSlug: string;
+  modules: AdminModuleItem[];
+}
+
+export interface AdminResourceItem {
+  id: string;
+  title: string;
+  description: string | null;
+  type: string;
+  fileUrl: string | null;
+  fileS3Key: string | null;
+  fileOriginalName: string | null;
+  fileSizeLabel: string | null;
+  position: number;
+}
+
+export function fetchAdminCourses(): Promise<AdminCourseListItem[]> {
+  return authorizedRequest<AdminCourseListItem[]>("/admin/courses");
+}
+
+export function createAdminCourse(payload: {
+  slug: string;
+  title: string;
+  summary: string;
+  level: string;
+  priceUsd: number;
+}): Promise<AdminCourseListItem> {
+  return authorizedRequest<AdminCourseListItem>("/admin/courses", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchAdminCourseDetail(slug: string): Promise<AdminCourseDetail> {
+  return authorizedRequest<AdminCourseDetail>(`/admin/courses/${encodeURIComponent(slug)}`);
+}
+
+export function updateAdminCourseMeta(
+  slug: string,
+  payload: Partial<{
+    title: string;
+    summary: string;
+    description: string | null;
+    level: string;
+    priceUsd: number;
+    previewImageUrl: string | null;
+    isPublished: boolean;
+    instructorName: string;
+  }>,
+): Promise<AdminCourseDetail> {
+  return authorizedRequest<AdminCourseDetail>(`/admin/courses/${encodeURIComponent(slug)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+// ── Course Structure ──
+
+export function fetchCourseStructure(slug: string): Promise<AdminCourseStructure> {
+  return authorizedRequest<AdminCourseStructure>(
+    `/admin/courses/${encodeURIComponent(slug)}/structure`,
+  );
+}
+
+export function createAdminModule(
+  slug: string,
+  payload: { title: string },
+): Promise<AdminModuleItem> {
+  return authorizedRequest<AdminModuleItem>(
+    `/admin/courses/${encodeURIComponent(slug)}/modules`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function updateAdminModule(
+  slug: string,
+  moduleId: string,
+  payload: { title: string },
+): Promise<AdminModuleItem> {
+  return authorizedRequest<AdminModuleItem>(
+    `/admin/courses/${encodeURIComponent(slug)}/modules/${encodeURIComponent(moduleId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function deleteAdminModule(slug: string, moduleId: string): Promise<void> {
+  return authorizedRequest<void>(
+    `/admin/courses/${encodeURIComponent(slug)}/modules/${encodeURIComponent(moduleId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function reorderAdminModule(
+  slug: string,
+  moduleId: string,
+  direction: "up" | "down",
+): Promise<void> {
+  return authorizedRequest<void>(
+    `/admin/courses/${encodeURIComponent(slug)}/modules/${encodeURIComponent(moduleId)}/reorder`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ direction }),
+    },
+  );
+}
+
+export function createAdminLesson(
+  slug: string,
+  moduleId: string,
+  payload: {
+    title: string;
+    summary?: string | null;
+    durationMinutes?: number;
+    isPreview?: boolean;
+    isLockedByDefault?: boolean;
+    isDraft?: boolean;
+  },
+): Promise<AdminLessonItem> {
+  return authorizedRequest<AdminLessonItem>(
+    `/admin/courses/${encodeURIComponent(slug)}/modules/${encodeURIComponent(moduleId)}/lessons`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function updateAdminLesson(
+  slug: string,
+  lessonId: string,
+  payload: Partial<{
+    title: string;
+    summary: string | null;
+    durationMinutes: number;
+    isPreview: boolean;
+    isLockedByDefault: boolean;
+    isDraft: boolean;
+    content: string | null;
+  }>,
+): Promise<AdminLessonItem> {
+  return authorizedRequest<AdminLessonItem>(
+    `/admin/courses/${encodeURIComponent(slug)}/lessons/${encodeURIComponent(lessonId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function deleteAdminLesson(slug: string, lessonId: string): Promise<void> {
+  return authorizedRequest<void>(
+    `/admin/courses/${encodeURIComponent(slug)}/lessons/${encodeURIComponent(lessonId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function reorderAdminLesson(
+  slug: string,
+  lessonId: string,
+  direction: "up" | "down",
+): Promise<void> {
+  return authorizedRequest<void>(
+    `/admin/courses/${encodeURIComponent(slug)}/lessons/${encodeURIComponent(lessonId)}/reorder`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ direction }),
+    },
+  );
+}
+
+// ── Resources ──
+
+export function fetchLessonResources(lessonId: string): Promise<AdminResourceItem[]> {
+  return authorizedRequest<AdminResourceItem[]>(
+    `/admin/lessons/${encodeURIComponent(lessonId)}/resources`,
+  );
+}
+
+export function createAdminResource(
+  lessonId: string,
+  payload: { title: string; description?: string | null; type: string; fileUrl?: string | null },
+): Promise<AdminResourceItem> {
+  return authorizedRequest<AdminResourceItem>(
+    `/admin/lessons/${encodeURIComponent(lessonId)}/resources`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function updateAdminResource(
+  resourceId: string,
+  payload: Partial<{ title: string; description: string | null; type: string; fileUrl: string | null }>,
+): Promise<AdminResourceItem> {
+  return authorizedRequest<AdminResourceItem>(
+    `/admin/resources/${encodeURIComponent(resourceId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function deleteAdminResource(resourceId: string): Promise<void> {
+  return authorizedRequest<void>(
+    `/admin/resources/${encodeURIComponent(resourceId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function requestResourceUploadUrl(
+  lessonId: string,
+  payload: { fileName: string; contentType: string; fileSize: number },
+): Promise<{ uploadUrl: string; s3Key: string }> {
+  return authorizedRequest<{ uploadUrl: string; s3Key: string }>(
+    `/admin/lessons/${encodeURIComponent(lessonId)}/resource/upload-url`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function confirmResourceUpload(
+  lessonId: string,
+  payload: { resourceId: string; s3Key: string; originalName: string; fileSize: number },
+): Promise<void> {
+  return authorizedRequest<void>(
+    `/admin/lessons/${encodeURIComponent(lessonId)}/resource/confirm`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+// ── TipTap Image Upload ──
+
+export function requestImageUploadUrl(
+  lessonId: string,
+  payload: { fileName: string; contentType: string; fileSize: number },
+): Promise<{ uploadUrl: string; imageKey: string; imageUrl: string }> {
+  return authorizedRequest<{ uploadUrl: string; imageKey: string; imageUrl: string }>(
+    `/admin/lessons/${encodeURIComponent(lessonId)}/content/image-upload-url`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
 }

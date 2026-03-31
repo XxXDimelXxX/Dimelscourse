@@ -1,15 +1,21 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3000";
+import { requestJson, type ApiError } from "./api-client";
+
 const SESSION_STORAGE_KEY = "dimelscourse.auth-session";
+
+export type AuthProvider = "local" | "google";
 
 export interface AuthUser {
   id: string;
   email: string;
   displayName: string;
   role: string;
+  avatarUrl: string | null;
+  authProviders: AuthProvider[];
 }
 
 export interface AuthSession {
   accessToken: string;
+  refreshToken: string;
   user: AuthUser;
 }
 
@@ -24,55 +30,131 @@ interface LoginPayload {
   password: string;
 }
 
-async function request<TResponse>(
-  path: string,
-  init: RequestInit,
-): Promise<TResponse> {
-  const response = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...init.headers,
-    },
-  });
+let refreshPromise: Promise<AuthSession | null> | null = null;
 
-  if (!response.ok) {
-    const message = await extractErrorMessage(response);
-    throw new Error(message);
-  }
-
-  return response.json() as Promise<TResponse>;
+function getAuthorizationHeader(accessToken: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${accessToken}`,
+  };
 }
 
-async function extractErrorMessage(response: Response): Promise<string> {
-  try {
-    const payload = (await response.json()) as {
-      message?: string | string[];
-      error?: string;
-    };
-
-    if (Array.isArray(payload.message)) {
-      return payload.message.join(", ");
-    }
-
-    return payload.message ?? payload.error ?? "Request failed";
-  } catch {
-    return "Request failed";
-  }
-}
-
-export async function registerUser(payload: RegisterPayload): Promise<AuthUser> {
-  return request<AuthUser>("/auth/register", {
+export async function registerUser(payload: RegisterPayload): Promise<AuthSession> {
+  return requestJson<AuthSession>("/auth/register", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
 export async function loginUser(payload: LoginPayload): Promise<AuthSession> {
-  return request<AuthSession>("/auth/login", {
+  return requestJson<AuthSession>("/auth/login/local", {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export async function fetchCurrentUser(): Promise<AuthUser> {
+  const session = getAuthSession();
+
+  if (!session) {
+    throw new Error("Требуется авторизация");
+  }
+
+  return requestJson<AuthUser>("/auth/me", {
+    method: "GET",
+    headers: getAuthorizationHeader(session.accessToken),
+  });
+}
+
+export async function refreshAuthSession(): Promise<AuthSession | null> {
+  const existingSession = getAuthSession();
+
+  if (!existingSession?.refreshToken) {
+    clearAuthSession();
+    return null;
+  }
+
+  if (!refreshPromise) {
+    refreshPromise = requestJson<AuthSession>("/auth/refresh", {
+      method: "POST",
+      body: JSON.stringify({
+        refreshToken: existingSession.refreshToken,
+      }),
+    })
+      .then((session) => {
+        saveAuthSession(session);
+        return session;
+      })
+      .catch(() => {
+        clearAuthSession();
+        return null;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+
+  return refreshPromise;
+}
+
+export async function logoutUser(): Promise<void> {
+  const session = getAuthSession();
+
+  if (!session?.refreshToken) {
+    clearAuthSession();
+    return;
+  }
+
+  try {
+    await requestJson<{ success: boolean }>("/auth/logout", {
+      method: "POST",
+      body: JSON.stringify({
+        refreshToken: session.refreshToken,
+      }),
+    });
+  } finally {
+    clearAuthSession();
+  }
+}
+
+export async function authorizedRequest<TResponse>(
+  path: string,
+  init: RequestInit = {},
+): Promise<TResponse> {
+  const session = getAuthSession();
+
+  if (!session) {
+    throw new Error("Требуется авторизация");
+  }
+
+  try {
+    return await requestJson<TResponse>(path, {
+      ...init,
+      headers: {
+        ...getAuthorizationHeader(session.accessToken),
+        ...init.headers,
+      },
+    });
+  } catch (error) {
+    const status = (error as ApiError).status;
+
+    if (status !== 401) {
+      throw error;
+    }
+
+    const refreshedSession = await refreshAuthSession();
+
+    if (!refreshedSession) {
+      throw new Error("Сессия истекла. Войдите снова.", { cause: error });
+    }
+
+    return requestJson<TResponse>(path, {
+      ...init,
+      headers: {
+        ...getAuthorizationHeader(refreshedSession.accessToken),
+        ...init.headers,
+      },
+    });
+  }
 }
 
 export function saveAuthSession(session: AuthSession): void {
@@ -92,6 +174,19 @@ export function getAuthSession(): AuthSession | null {
     localStorage.removeItem(SESSION_STORAGE_KEY);
     return null;
   }
+}
+
+export function patchStoredAuthUser(user: AuthUser): void {
+  const session = getAuthSession();
+
+  if (!session) {
+    return;
+  }
+
+  saveAuthSession({
+    ...session,
+    user,
+  });
 }
 
 export function clearAuthSession(): void {

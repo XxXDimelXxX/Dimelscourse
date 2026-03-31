@@ -1,54 +1,31 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router";
-import { BookOpen, Code2, Users, Award, ArrowRight, CheckCircle } from "lucide-react";
-import { ImageWithFallback } from "../components/figma/ImageWithFallback";
+import { useNavigate } from "react-router";
+import { BookOpen, Code2, Users, Award, CheckCircle } from "lucide-react";
+import { AuthForm } from "../components/home/AuthForm";
+import { CourseGrid } from "../components/home/CourseGrid";
 import { useAuth } from "../context/AuthContext";
+import { getErrorMessage } from "../lib/formatters";
 import { fetchPublishedCourses, type CourseCard } from "../lib/lms-api";
 
-function levelLabel(level: string): string {
-  switch (level) {
-    case "beginner":
-      return "Для начинающих";
-    case "advanced":
-      return "Продвинутый";
-    default:
-      return "Популярный";
-  }
-}
-
-function levelBadgeClass(level: string): string {
-  switch (level) {
-    case "beginner":
-      return "bg-green-600";
-    case "advanced":
-      return "bg-purple-600";
-    default:
-      return "bg-blue-600";
-  }
-}
-
 export function Home() {
-  const { user, login, register } = useAuth();
-  const [isLoginMode, setIsLoginMode] = useState(true);
-  const [displayName, setDisplayName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { user, isLoading, login, register } = useAuth();
   const [courses, setCourses] = useState<CourseCard[]>([]);
   const [coursesError, setCoursesError] = useState<string | null>(null);
   const [isLoadingCourses, setIsLoadingCourses] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
+    if (isLoading) {
+      return;
+    }
+
     if (user) {
       navigate("/dashboard", { replace: true });
       return;
     }
 
     void loadCourses();
-  }, [navigate, user]);
+  }, [isLoading, navigate, user]);
 
   const loadCourses = async () => {
     try {
@@ -57,40 +34,9 @@ export function Home() {
       const nextCourses = await fetchPublishedCourses();
       setCourses(nextCourses);
     } catch (error) {
-      setCoursesError(
-        error instanceof Error ? error.message : "Не удалось загрузить курсы",
-      );
+      setCoursesError(getErrorMessage(error, "Не удалось загрузить курсы"));
     } finally {
       setIsLoadingCourses(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage(null);
-
-    if (!isLoginMode && password !== confirmPassword) {
-      setErrorMessage("Пароли не совпадают");
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-
-      if (isLoginMode) {
-        await login(email, password);
-      } else {
-        await register(displayName, email, password);
-        await login(email, password);
-      }
-
-      navigate("/dashboard");
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Не удалось выполнить запрос",
-      );
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -128,8 +74,8 @@ export function Home() {
               Освой программирование с нуля
             </h2>
             <p className="text-xl text-gray-600">
-              Практические курсы по веб-разработке, созданные экспертами индустрии.
-              Получи востребованную профессию за 6 месяцев.
+              Практические курсы по веб-разработке, созданные экспертами индустрии. Получи
+              востребованную профессию за 6 месяцев.
             </p>
 
             <div className="grid grid-cols-2 gap-4 pt-4">
@@ -175,202 +121,16 @@ export function Home() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
-            <div className="flex gap-2 mb-6 bg-gray-100 p-1 rounded-lg">
-              <button
-                type="button"
-                onClick={() => setIsLoginMode(true)}
-                className={`flex-1 py-2 px-4 rounded-md transition ${
-                  isLoginMode
-                    ? "bg-white text-blue-600 shadow-sm"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
-              >
-                Вход
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsLoginMode(false)}
-                className={`flex-1 py-2 px-4 rounded-md transition ${
-                  !isLoginMode
-                    ? "bg-white text-blue-600 shadow-sm"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
-              >
-                Регистрация
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {!isLoginMode && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Имя
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={displayName}
-                    onChange={(event) => setDisplayName(event.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                    placeholder="Ваше имя"
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                  placeholder="example@email.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Пароль
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                  placeholder="••••••••"
-                />
-              </div>
-
-              {!isLoginMode && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Подтвердите пароль
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={confirmPassword}
-                    onChange={(event) => setConfirmPassword(event.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                    placeholder="••••••••"
-                  />
-                </div>
-              )}
-
-              {errorMessage && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {errorMessage}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-medium hover:shadow-lg transition flex items-center justify-center gap-2 group disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {isSubmitting
-                  ? "Подождите..."
-                  : isLoginMode
-                    ? "Войти"
-                    : "Зарегистрироваться"}
-                <ArrowRight className="size-4 group-hover:translate-x-1 transition" />
-              </button>
-            </form>
-          </div>
+          <AuthForm
+            isLoading={isLoading}
+            onLogin={login}
+            onRegister={register}
+            onSuccess={() => navigate("/dashboard")}
+          />
         </div>
       </section>
 
-      <section id="courses" className="bg-white py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Программа MVP
-            </h2>
-            <p className="text-xl text-gray-600">
-              Один курс, понятная покупка и быстрый путь к обучению
-            </p>
-          </div>
-
-          {coursesError && (
-            <div className="mb-8 rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-red-700">
-              {coursesError}
-            </div>
-          )}
-
-          {isLoadingCourses ? (
-            <div className="grid md:grid-cols-3 gap-8">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <div
-                  key={index}
-                  className="h-96 rounded-xl border border-gray-200 bg-gray-50 animate-pulse"
-                />
-              ))}
-            </div>
-          ) : courses.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-gray-300 p-12 text-center text-gray-500">
-              В базе пока нет опубликованных курсов.
-            </div>
-          ) : (
-            <div className="grid md:grid-cols-3 gap-8">
-              {courses.map((course) => (
-                <div
-                  key={course.id}
-                  className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-xl transition group"
-                >
-                  <div className="relative h-48 overflow-hidden">
-                    <ImageWithFallback
-                      src={
-                        course.previewImageUrl ??
-                        "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?fit=max&fm=jpg&q=80&w=1080"
-                      }
-                      alt={course.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                    />
-                    <div
-                      className={`absolute top-4 left-4 ${levelBadgeClass(course.level)} text-white px-3 py-1 rounded-full text-sm font-medium`}
-                    >
-                      {levelLabel(course.level)}
-                    </div>
-                  </div>
-                  <div className="p-6">
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                      {course.title}
-                    </h3>
-                    <p className="text-gray-600 mb-4">
-                      {course.summary}
-                    </p>
-                    <div className="flex items-center justify-between text-sm text-gray-500 mb-5">
-                      <span>{course.lessonCount} уроков</span>
-                      <span>{course.duration}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-2xl font-bold text-gray-900">
-                          ${course.priceUsd}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          или ${course.subscriptionPriceUsd}/мес
-                        </div>
-                      </div>
-                      <Link
-                        to={`/course/${course.slug}`}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium"
-                      >
-                        Подробнее
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
+      <CourseGrid courses={courses} isLoading={isLoadingCourses} error={coursesError} />
     </div>
   );
 }

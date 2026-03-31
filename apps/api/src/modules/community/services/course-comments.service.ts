@@ -44,13 +44,17 @@ export class CourseCommentsService {
     }));
   }
 
-  async createForCourse(courseSlug: string, dto: CreateCourseCommentDto) {
+  async createForCourse(
+    courseSlug: string,
+    userId: string,
+    dto: CreateCourseCommentDto,
+  ) {
     const [course, author] = await Promise.all([
       this.coursesRepository.findOne({
         where: { slug: courseSlug },
       }),
       this.usersRepository.findOne({
-        where: { id: dto.userId },
+        where: { id: userId },
       }),
     ]);
 

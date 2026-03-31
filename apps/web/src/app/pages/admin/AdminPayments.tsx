@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search, CheckCircle, XCircle, Clock, DollarSign, Calendar, Filter } from "lucide-react";
+import { getErrorMessage } from "../../lib/formatters";
 import { fetchAdminPayments, type AdminPayment } from "../../lib/lms-api";
 
 export function AdminPayments() {
@@ -21,7 +22,7 @@ export function AdminPayments() {
       setPayments(nextPayments);
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Не удалось загрузить платежи",
+        getErrorMessage(error, "Не удалось загрузить платежи"),
       );
     } finally {
       setIsLoading(false);

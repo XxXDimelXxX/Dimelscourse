@@ -1,6 +1,15 @@
-import { Body, Controller, Get, Param, Patch } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, UseGuards } from "@nestjs/common";
+import { Roles } from "../../identity-access/decorators/roles.decorator";
+import { UserRole } from "../../identity-access/entities/user.entity";
+import { AccessTokenGuard } from "../../identity-access/guards/access-token.guard";
+import { RolesGuard } from "../../identity-access/guards/roles.guard";
+import { ZodValidationPipe } from "../../../core/pipes/zod-validation.pipe";
+import { ToggleAccessDto, toggleAccessSchema } from "../dto/toggle-access.dto";
+import { UpdateCourseDto, updateCourseSchema } from "../dto/update-course.dto";
 import { AdminService } from "../services/admin.service";
 
+@UseGuards(AccessTokenGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPERADMIN)
 @Controller("admin")
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
@@ -18,9 +27,9 @@ export class AdminController {
   @Patch("users/:userId/access")
   toggleUserAccess(
     @Param("userId") userId: string,
-    @Body() body: { grant: boolean; courseSlug?: string },
+    @Body(new ZodValidationPipe(toggleAccessSchema)) dto: ToggleAccessDto,
   ) {
-    return this.adminService.toggleUserAccess(userId, body);
+    return this.adminService.toggleUserAccess(userId, dto);
   }
 
   @Get("payments")
@@ -36,15 +45,8 @@ export class AdminController {
   @Patch("course/:slug")
   updateCourse(
     @Param("slug") slug: string,
-    @Body()
-    body: {
-      title?: string;
-      description?: string;
-      priceUsd?: number;
-      subscriptionPriceUsd?: number;
-      instructorName?: string;
-    },
+    @Body(new ZodValidationPipe(updateCourseSchema)) dto: UpdateCourseDto,
   ) {
-    return this.adminService.updateCourse(slug, body);
+    return this.adminService.updateCourse(slug, dto);
   }
 }

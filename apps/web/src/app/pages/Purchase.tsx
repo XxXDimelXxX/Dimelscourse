@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
+import { getErrorMessage } from "../lib/formatters";
 import {
   createCheckout,
   fetchDashboard,
@@ -30,10 +31,6 @@ export function Purchase() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    void loadData();
-  }, [user]);
-
   const loadData = async () => {
     try {
       setIsLoading(true);
@@ -43,19 +40,24 @@ export function Purchase() {
       setCourse(featuredCourse);
 
       if (user) {
-        const dashboard = await fetchDashboard(user.id);
+        const dashboard = await fetchDashboard();
         setHasAccess(dashboard.courses.some((item) => item.courseSlug === featuredCourse?.slug));
       } else {
         setHasAccess(false);
       }
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Не удалось загрузить страницу оплаты",
+        getErrorMessage(error, "Не удалось загрузить страницу оплаты"),
       );
     } finally {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    void loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const handlePayment = async () => {
     if (!user || !course) {
@@ -67,7 +69,6 @@ export function Purchase() {
       setErrorMessage(null);
 
       const checkout = await createCheckout({
-        userId: user.id,
         courseSlug: course.slug,
         paymentType,
         paymentMethodLabel:
@@ -106,7 +107,7 @@ export function Purchase() {
     } catch (error) {
       setPaymentStatus("failed");
       setErrorMessage(
-        error instanceof Error ? error.message : "Не удалось обработать платеж",
+        getErrorMessage(error, "Не удалось обработать платеж"),
       );
     }
   };

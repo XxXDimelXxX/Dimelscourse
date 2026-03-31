@@ -9,6 +9,7 @@ import {
 import { LessonProgressEntity } from "../../learning/entities/lesson-progress.entity";
 import { CourseEntity } from "./course.entity";
 import { CourseModuleEntity } from "./course-module.entity";
+import { CourseResourceEntity } from "./course-resource.entity";
 
 @Entity("lessons")
 export class LessonEntity {
@@ -39,11 +40,26 @@ export class LessonEntity {
   @Column({ name: "video_url", type: "varchar", nullable: true })
   videoUrl!: string | null;
 
+  @Column({ name: "video_s3_key", type: "varchar", nullable: true })
+  videoS3Key!: string | null;
+
+  @Column({ name: "video_original_name", type: "varchar", nullable: true })
+  videoOriginalName!: string | null;
+
+  @Column({ name: "video_size_bytes", type: "bigint", nullable: true })
+  videoSizeBytes!: number | null;
+
   @Column({ name: "is_preview", default: false })
   isPreview!: boolean;
 
   @Column({ name: "is_locked_by_default", default: false })
   isLockedByDefault!: boolean;
+
+  @Column({ type: "text", nullable: true })
+  content!: string | null;
+
+  @Column({ name: "is_draft", default: false })
+  isDraft!: boolean;
 
   @ManyToOne(() => CourseEntity, (course) => course.lessons, {
     onDelete: "CASCADE",
@@ -59,4 +75,7 @@ export class LessonEntity {
 
   @OneToMany(() => LessonProgressEntity, (progress) => progress.lesson)
   lessonProgresses!: LessonProgressEntity[];
+
+  @OneToMany(() => CourseResourceEntity, (resource) => resource.lesson)
+  resources!: CourseResourceEntity[];
 }

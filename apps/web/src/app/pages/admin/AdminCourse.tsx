@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { VideoUploadButton } from "../../components/admin/VideoUploadButton";
+import { getErrorMessage } from "../../lib/formatters";
 import {
   Edit2,
   Save,
@@ -49,7 +51,7 @@ export function AdminCourse() {
       });
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Не удалось загрузить курс",
+        getErrorMessage(error, "Не удалось загрузить курс"),
       );
     } finally {
       setIsLoading(false);
@@ -79,7 +81,7 @@ export function AdminCourse() {
       setSuccessMessage("Изменения сохранены");
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Не удалось сохранить курс",
+        getErrorMessage(error, "Не удалось сохранить курс"),
       );
     } finally {
       setIsSaving(false);
@@ -306,15 +308,22 @@ export function AdminCourse() {
                     <div className="p-2 bg-purple-100 rounded-lg">
                       <PlayCircle className="size-4 text-purple-600" />
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <p className="font-medium text-gray-900">
                         {lesson.title}
                       </p>
                       <p className="text-sm text-gray-500">
                         {lesson.description}
                       </p>
+                      <div className="mt-1">
+                        <VideoUploadButton
+                          lessonId={lesson.id}
+                          currentVideoName={lesson.videoOriginalName}
+                          onUploadComplete={loadCourse}
+                        />
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-500">
+                    <div className="text-sm text-gray-500 shrink-0">
                       {lesson.duration}
                     </div>
                   </div>

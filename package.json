@@ -2,6 +2,7 @@
   "name": "dimelscourse",
   "private": true,
   "version": "0.1.0",
+  "type": "module",
   "workspaces": [
     "apps/*"
   ],
@@ -12,6 +13,17 @@
     "build:web": "npm run build -w @dimelscourse/web",
     "dev:api": "npm run start:dev -w @dimelscourse/api",
     "build:api": "npm run build -w @dimelscourse/api",
-    "seed:api": "npm run seed -w @dimelscourse/api"
+    "seed:api": "npm run seed -w @dimelscourse/api",
+    "lint": "eslint apps/",
+    "lint:fix": "eslint apps/ --fix",
+    "format": "prettier --write \"apps/**/*.{ts,tsx}\""
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.1.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "prettier": "^3.8.1",
+    "typescript-eslint": "^8.57.2"
   }
 }

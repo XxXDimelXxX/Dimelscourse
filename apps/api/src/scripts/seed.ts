@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import { hash } from "bcryptjs";
 import { seedDataSource } from "../core/database/seed-data-source";
 import { CourseCommentEntity } from "../modules/community/entities/course-comment.entity";
 import { CourseEntity, CourseLevel } from "../modules/catalog/entities/course.entity";
@@ -9,6 +10,7 @@ import {
 } from "../modules/catalog/entities/course-resource.entity";
 import { InstructorEntity } from "../modules/catalog/entities/instructor.entity";
 import { LessonEntity } from "../modules/catalog/entities/lesson.entity";
+import { AuthIdentityEntity, AuthProvider } from "../modules/identity-access/entities/auth-identity.entity";
 import { UserEntity, UserRole } from "../modules/identity-access/entities/user.entity";
 import { AchievementEntity } from "../modules/learning/entities/achievement.entity";
 import {
@@ -76,6 +78,8 @@ async function truncateTables(): Promise<void> {
       lesson_progress,
       enrollments,
       payments,
+      refresh_sessions,
+      auth_identities,
       course_resources,
       lessons,
       course_modules,
@@ -92,6 +96,7 @@ async function run(): Promise<void> {
   await truncateTables();
 
   const usersRepository = seedDataSource.getRepository(UserEntity);
+  const authIdentitiesRepository = seedDataSource.getRepository(AuthIdentityEntity);
   const instructorsRepository = seedDataSource.getRepository(InstructorEntity);
   const coursesRepository = seedDataSource.getRepository(CourseEntity);
   const courseModulesRepository = seedDataSource.getRepository(CourseModuleEntity);
@@ -108,7 +113,6 @@ async function run(): Promise<void> {
   const [studentUser, enrolledStudent, adminUser] = await usersRepository.save([
     usersRepository.create({
       email: "student@email.com",
-      passwordHash: "hashed:password",
       displayName: "Иван Петров",
       role: UserRole.STUDENT,
       isActive: true,
@@ -116,7 +120,6 @@ async function run(): Promise<void> {
     }),
     usersRepository.create({
       email: "alexey@example.com",
-      passwordHash: "hashed:password",
       displayName: "Алексей Морозов",
       role: UserRole.STUDENT,
       isActive: true,
@@ -124,11 +127,37 @@ async function run(): Promise<void> {
     }),
     usersRepository.create({
       email: "admin@test.com",
-      passwordHash: "hashed:admin123",
       displayName: "Администратор",
       role: UserRole.ADMIN,
       isActive: true,
       avatarUrl: null,
+    }),
+  ]);
+
+  await authIdentitiesRepository.save([
+    authIdentitiesRepository.create({
+      userId: studentUser.id,
+      provider: AuthProvider.LOCAL,
+      providerUserId: "student@email.com",
+      email: "student@email.com",
+      passwordHash: await hash("password", 12),
+      lastLoginAt: new Date("2026-03-20T10:00:00.000Z"),
+    }),
+    authIdentitiesRepository.create({
+      userId: enrolledStudent.id,
+      provider: AuthProvider.LOCAL,
+      providerUserId: "alexey@example.com",
+      email: "alexey@example.com",
+      passwordHash: await hash("password", 12),
+      lastLoginAt: new Date("2026-03-22T09:30:00.000Z"),
+    }),
+    authIdentitiesRepository.create({
+      userId: adminUser.id,
+      provider: AuthProvider.LOCAL,
+      providerUserId: "admin@test.com",
+      email: "admin@test.com",
+      passwordHash: await hash("admin123", 12),
+      lastLoginAt: new Date("2026-03-23T08:45:00.000Z"),
     }),
   ]);
 

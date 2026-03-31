@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
+import { S3Service } from "../../../core/services/s3.service";
+import { getSortedLessons, getSortedModules } from "../../../core/utils/course.utils";
 import { LessonEntity } from "../../catalog/entities/lesson.entity";
 import { EnrollmentEntity, EnrollmentStatus } from "../entities/enrollment.entity";
 import { LessonProgressEntity } from "../entities/lesson-progress.entity";
@@ -14,6 +16,7 @@ export class LearningService {
     private readonly lessonProgressRepository: Repository<LessonProgressEntity>,
     @InjectRepository(LessonEntity)
     private readonly lessonsRepository: Repository<LessonEntity>,
+    private readonly s3Service: S3Service,
   ) {}
 
   async getCourseWorkspace(userId: string, courseSlug: string) {
@@ -51,11 +54,8 @@ export class LearningService {
       ]),
     );
 
-    const sortedLessons = [...(enrollment.course.courseModules ?? [])]
-      .sort((left, right) => left.position - right.position)
-      .flatMap((courseModule) =>
-        [...(courseModule.lessons ?? [])].sort((left, right) => left.position - right.position),
-      );
+    const sortedLessons = getSortedLessons(enrollment.course.courseModules ?? [])
+      .filter((lesson) => !lesson.isDraft);
 
     const completedIds = new Set(
       (enrollment.lessonProgresses ?? [])
@@ -78,6 +78,8 @@ export class LearningService {
         blocked = true;
       }
     }
+
+    const sortedModules = getSortedModules(enrollment.course.courseModules ?? []);
 
     return {
       enrollment: {
@@ -105,16 +107,20 @@ export class LearningService {
               bio: enrollment.course.instructor.bio,
             }
           : null,
-        modules: [...(enrollment.course.courseModules ?? [])]
-          .sort((left, right) => left.position - right.position)
-          .map((courseModule) => ({
+        modules: await Promise.all(
+          sortedModules.map(async (courseModule) => ({
             id: courseModule.id,
             title: courseModule.title,
             position: courseModule.position,
-            lessons: [...(courseModule.lessons ?? [])]
-              .sort((left, right) => left.position - right.position)
-              .map((lesson) => {
+            lessons: await Promise.all(
+              courseModule.lessons.filter((l) => !l.isDraft).map(async (lesson) => {
                 const progress = progressByLessonId.get(lesson.id);
+                const isLocked = !unlockedIds.has(lesson.id);
+
+                let videoUrl: string | null = null;
+                if (lesson.videoS3Key && !isLocked) {
+                  videoUrl = await this.s3Service.getPresignedDownloadUrl(lesson.videoS3Key);
+                }
 
                 return {
                   id: lesson.id,
@@ -124,11 +130,14 @@ export class LearningService {
                   durationMinutes: lesson.durationMinutes,
                   position: lesson.position,
                   completed: progress?.isCompleted ?? false,
-                  locked: !unlockedIds.has(lesson.id),
+                  locked: isLocked,
                   completedAt: progress?.completedAt ?? null,
+                  videoUrl,
                 };
               }),
+            ),
           })),
+        ),
         resources: [...(enrollment.course.resources ?? [])]
           .sort((left, right) => left.position - right.position)
           .map((resource) => ({
@@ -197,9 +206,8 @@ export class LearningService {
 
     await this.lessonProgressRepository.save(progress);
 
-    const sortedLessons = (enrollment.course.courseModules ?? [])
-      .flatMap((courseModule) => courseModule.lessons ?? [])
-      .sort((left, right) => left.position - right.position);
+    const sortedLessons = getSortedLessons(enrollment.course.courseModules ?? [])
+      .filter((item) => !item.isDraft);
 
     const lessonIds = new Set(sortedLessons.map((item) => item.id));
     const completedIds = new Set(

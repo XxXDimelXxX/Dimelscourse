@@ -13,6 +13,7 @@ import { EnrollmentEntity } from "../../learning/entities/enrollment.entity";
 import { PaymentEntity } from "../../payments/entities/payment.entity";
 import { CourseModuleEntity } from "./course-module.entity";
 import { CourseResourceEntity } from "./course-resource.entity";
+import { UserEntity } from "../../identity-access/entities/user.entity";
 import { InstructorEntity } from "./instructor.entity";
 import { LessonEntity } from "./lesson.entity";
 
@@ -72,6 +73,16 @@ export class CourseEntity {
 
   @Column({ name: "preview_image_url", type: "varchar", nullable: true })
   previewImageUrl!: string | null;
+
+  @Column({ name: "created_by_id", type: "uuid", nullable: true })
+  createdById!: string | null;
+
+  @ManyToOne(() => UserEntity, (user) => user.createdCourses, {
+    nullable: true,
+    onDelete: "SET NULL",
+  })
+  @JoinColumn({ name: "created_by_id" })
+  createdBy!: UserEntity | null;
 
   @Column({ name: "instructor_id", type: "uuid", nullable: true })
   instructorId!: string | null;

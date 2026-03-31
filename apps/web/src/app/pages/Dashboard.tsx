@@ -13,30 +13,15 @@ import {
   PlayCircle,
   CheckCircle2,
   Trophy,
-  ShoppingCart,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import {
-  fetchDashboard,
-  fetchPublishedCourses,
-  type CourseCard,
-  type DashboardResponse,
-} from "../lib/lms-api";
-
-function formatDateLabel(value: string): string {
-  return new Date(value).toLocaleDateString("ru-RU", {
-    day: "numeric",
-    month: "long",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+import { formatDateLabel, getErrorMessage } from "../lib/formatters";
+import { fetchDashboard, type DashboardResponse } from "../lib/lms-api";
 
 export function Dashboard() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
-  const [featuredCourse, setFeaturedCourse] = useState<CourseCard | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -46,23 +31,17 @@ export function Dashboard() {
       return;
     }
 
-    void loadData(user.id);
+    void loadData();
   }, [navigate, user]);
 
-  const loadData = async (userId: string) => {
+  const loadData = async () => {
     try {
       setIsLoading(true);
       setErrorMessage(null);
-      const [nextDashboard, courses] = await Promise.all([
-        fetchDashboard(userId),
-        fetchPublishedCourses(),
-      ]);
+      const nextDashboard = await fetchDashboard();
       setDashboard(nextDashboard);
-      setFeaturedCourse(courses[0] ?? null);
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Не удалось загрузить дашборд",
-      );
+      setErrorMessage(getErrorMessage(error, "Не удалось загрузить дашборд"));
     } finally {
       setIsLoading(false);
     }
@@ -91,7 +70,14 @@ export function Dashboard() {
           </div>
 
           <div className="flex items-center gap-4">
-            {user.role === "admin" && (
+            <Link
+              to="/courses"
+              className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition text-sm font-medium"
+            >
+              <BookOpen className="size-4" />
+              <span className="hidden sm:inline">Каталог</span>
+            </Link>
+            {(user.role === "admin" || user.role === "superadmin") && (
               <Link
                 to="/admin"
                 className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm font-medium"
@@ -132,36 +118,23 @@ export function Dashboard() {
           </div>
         )}
 
-        {!isLoading && !hasAccess && featuredCourse && (
-          <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl shadow-xl p-8 mb-8 text-white">
-            <div className="max-w-3xl">
-              <div className="flex items-center gap-2 mb-4">
-                <ShoppingCart className="size-6" />
-                <span className="text-sm font-medium bg-white/20 px-3 py-1 rounded-full">
-                  Доступ еще не открыт
-                </span>
-              </div>
-              <h3 className="text-3xl font-bold mb-4">
-                {featuredCourse.title}
+        {!isLoading && !hasAccess && (
+          <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl shadow-xl p-6 mb-8 text-white flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <h3 className="text-xl font-bold mb-1">
+                Начните обучение прямо сейчас
               </h3>
-              <p className="text-blue-100 mb-6 text-lg">
-                {featuredCourse.summary}
+              <p className="text-blue-100 text-sm">
+                Выберите курс из каталога и получите доступ к урокам
               </p>
-              <div className="flex flex-wrap gap-4">
-                <Link
-                  to="/purchase"
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-white text-blue-600 rounded-lg hover:bg-blue-50 transition font-medium"
-                >
-                  Купить курс
-                </Link>
-                <Link
-                  to={`/course/${featuredCourse.slug}`}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 transition border border-white/30 rounded-lg font-medium"
-                >
-                  Посмотреть программу
-                </Link>
-              </div>
             </div>
+            <Link
+              to="/courses"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-white text-blue-600 rounded-lg hover:bg-blue-50 transition font-medium shrink-0"
+            >
+              <BookOpen className="size-5" />
+              Перейти в каталог
+            </Link>
           </div>
         )}
 
@@ -292,8 +265,17 @@ export function Dashboard() {
                         </div>
                       ))
                     ) : (
-                      <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center text-gray-500">
-                        У вас пока нет активного доступа к курсу.
+                      <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center">
+                        <p className="text-gray-500 mb-3">
+                          У вас пока нет активных курсов.
+                        </p>
+                        <Link
+                          to="/courses"
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium"
+                        >
+                          <BookOpen className="size-4" />
+                          Выбрать курс
+                        </Link>
                       </div>
                     )}
                   </div>

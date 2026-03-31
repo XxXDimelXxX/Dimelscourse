@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
+import { getSortedModules } from "../../../core/utils/course.utils";
 import { CourseEntity } from "../../catalog/entities/course.entity";
 import { InstructorEntity } from "../../catalog/entities/instructor.entity";
 import { UserEntity } from "../../identity-access/entities/user.entity";
@@ -8,6 +9,7 @@ import {
   EnrollmentEntity,
   EnrollmentStatus,
 } from "../../learning/entities/enrollment.entity";
+import { EnrollmentService } from "../../learning/services/enrollment.service";
 import { PaymentEntity, PaymentStatus } from "../../payments/entities/payment.entity";
 
 @Injectable()
@@ -23,6 +25,7 @@ export class AdminService {
     private readonly coursesRepository: Repository<CourseEntity>,
     @InjectRepository(InstructorEntity)
     private readonly instructorsRepository: Repository<InstructorEntity>,
+    private readonly enrollmentService: EnrollmentService,
   ) {}
 
   async getOverview() {
@@ -145,82 +148,24 @@ export class AdminService {
       throw new NotFoundException("User not found");
     }
 
-    const course =
-      input.courseSlug
-        ? await this.coursesRepository.findOne({
-            where: { slug: input.courseSlug },
-            relations: {
-              courseModules: {
-                lessons: true,
-              },
-            },
-          })
-        : await this.coursesRepository.findOne({
-            where: { isPublished: true },
-            relations: {
-              courseModules: {
-                lessons: true,
-              },
-            },
-            order: { createdAt: "ASC" },
-          });
+    const course = input.courseSlug
+      ? await this.coursesRepository.findOne({ where: { slug: input.courseSlug } })
+      : await this.coursesRepository.findOne({
+          where: { isPublished: true },
+          order: { createdAt: "ASC" },
+        });
 
     if (!course) {
       throw new NotFoundException("Course not found");
     }
 
-    const existingEnrollment = await this.enrollmentsRepository.findOne({
-      where: {
-        userId,
-        courseId: course.id,
-      },
-    });
-
-    const lessons = [...(course.courseModules ?? [])]
-      .sort((left, right) => left.position - right.position)
-      .flatMap((courseModule) =>
-        [...(courseModule.lessons ?? [])].sort((left, right) => left.position - right.position),
-      );
-
     if (input.grant) {
-      if (!existingEnrollment) {
-        await this.enrollmentsRepository.save(
-          this.enrollmentsRepository.create({
-            userId,
-            courseId: course.id,
-            status: EnrollmentStatus.ACTIVE,
-            progressPercent: 0,
-            completedLessons: 0,
-            totalLessons: lessons.length,
-            nextLessonTitle: lessons[0]?.title ?? null,
-            timeLeftLabel: "В процессе",
-            lastActivityAt: new Date(),
-          }),
-        );
-      } else {
-        existingEnrollment.status =
-          existingEnrollment.progressPercent === 100
-            ? EnrollmentStatus.COMPLETED
-            : EnrollmentStatus.ACTIVE;
-        existingEnrollment.totalLessons = lessons.length;
-        existingEnrollment.nextLessonTitle =
-          existingEnrollment.progressPercent === 100
-            ? "Курс завершен"
-            : lessons[0]?.title ?? null;
-        existingEnrollment.timeLeftLabel =
-          existingEnrollment.progressPercent === 100 ? "Завершен" : "В процессе";
-        existingEnrollment.lastActivityAt = new Date();
-        await this.enrollmentsRepository.save(existingEnrollment);
-      }
-    } else if (existingEnrollment) {
-      existingEnrollment.status = EnrollmentStatus.PAUSED;
-      existingEnrollment.timeLeftLabel = "Доступ остановлен";
-      await this.enrollmentsRepository.save(existingEnrollment);
+      await this.enrollmentService.grantAccess(userId, course.id);
+    } else {
+      await this.enrollmentService.revokeAccess(userId, course.id);
     }
 
-    return {
-      success: true,
-    };
+    return { success: true };
   }
 
   async getPayments() {
@@ -270,20 +215,17 @@ export class AdminService {
       subscriptionPriceUsd: course.subscriptionPriceUsd,
       duration: course.durationLabel,
       instructorName: course.instructor?.fullName ?? "",
-      modules: [...(course.courseModules ?? [])]
-        .sort((left, right) => left.position - right.position)
-        .map((courseModule) => ({
-          id: courseModule.id,
-          title: courseModule.title,
-          lessons: [...(courseModule.lessons ?? [])]
-            .sort((left, right) => left.position - right.position)
-            .map((lesson) => ({
-              id: lesson.id,
-              title: lesson.title,
-              description: lesson.summary,
-              duration: `${lesson.durationMinutes} мин`,
-            })),
+      modules: getSortedModules(course.courseModules ?? []).map((courseModule) => ({
+        id: courseModule.id,
+        title: courseModule.title,
+        lessons: courseModule.lessons.map((lesson) => ({
+          id: lesson.id,
+          title: lesson.title,
+          description: lesson.summary,
+          duration: `${lesson.durationMinutes} мин`,
+          videoOriginalName: lesson.videoOriginalName,
         })),
+      })),
     };
   }
 

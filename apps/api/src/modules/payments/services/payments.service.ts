@@ -7,6 +7,7 @@ import {
   EnrollmentEntity,
   EnrollmentStatus,
 } from "../../learning/entities/enrollment.entity";
+import { EnrollmentService } from "../../learning/services/enrollment.service";
 import { PaymentEntity, PaymentStatus, PaymentType } from "../entities/payment.entity";
 
 @Injectable()
@@ -20,6 +21,7 @@ export class PaymentsService {
     private readonly coursesRepository: Repository<CourseEntity>,
     @InjectRepository(EnrollmentEntity)
     private readonly enrollmentsRepository: Repository<EnrollmentEntity>,
+    private readonly enrollmentService: EnrollmentService,
   ) {}
 
   async createCheckout(input: {
@@ -126,63 +128,7 @@ export class PaymentsService {
   }
 
   private async ensureCourseAccess(payment: PaymentEntity): Promise<void> {
-    const course = await this.coursesRepository.findOne({
-      where: { id: payment.courseId },
-      relations: {
-        courseModules: {
-          lessons: true,
-        },
-      },
-    });
-
-    if (!course) {
-      throw new NotFoundException("Course not found");
-    }
-
-    const lessons = [...(course.courseModules ?? [])]
-      .sort((left, right) => left.position - right.position)
-      .flatMap((courseModule) =>
-        [...(courseModule.lessons ?? [])].sort((left, right) => left.position - right.position),
-      );
-
-    const existingEnrollment = await this.enrollmentsRepository.findOne({
-      where: {
-        userId: payment.userId,
-        courseId: payment.courseId,
-      },
-    });
-
-    const nextLesson = lessons[0]?.title ?? null;
-
-    if (existingEnrollment) {
-      existingEnrollment.status =
-        existingEnrollment.progressPercent === 100
-          ? EnrollmentStatus.COMPLETED
-          : EnrollmentStatus.ACTIVE;
-      existingEnrollment.totalLessons = lessons.length;
-      existingEnrollment.nextLessonTitle =
-        existingEnrollment.progressPercent === 100 ? "Курс завершен" : nextLesson;
-      existingEnrollment.timeLeftLabel =
-        existingEnrollment.progressPercent === 100 ? "Завершен" : "В процессе";
-      existingEnrollment.lastActivityAt = new Date();
-      await this.enrollmentsRepository.save(existingEnrollment);
-      return;
-    }
-
-    await this.enrollmentsRepository.save(
-      this.enrollmentsRepository.create({
-        userId: payment.userId,
-        courseId: payment.courseId,
-        status: EnrollmentStatus.ACTIVE,
-        progressPercent: 0,
-        completedLessons: 0,
-        totalLessons: lessons.length,
-        nextLessonTitle: nextLesson,
-        timeLeftLabel: "В процессе",
-        completedAt: null,
-        lastActivityAt: new Date(),
-      }),
-    );
+    await this.enrollmentService.grantAccess(payment.userId, payment.courseId);
   }
 
   private resolveAmount(course: CourseEntity, paymentType: PaymentType): number {
