@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { BookOpen, Code2, Users, Award, CheckCircle } from "lucide-react";
+import { PublicHeader } from "../components/PublicHeader";
 import { AuthForm } from "../components/home/AuthForm";
 import { CourseGrid } from "../components/home/CourseGrid";
 import { useAuth } from "../context/AuthContext";
@@ -40,29 +41,18 @@ export function Home() {
     }
   };
 
+  // Show nothing while auth is bootstrapping to prevent flash of login form
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
+        <Code2 className="size-10 text-blue-600 animate-pulse" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <Code2 className="size-8 text-blue-600" />
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              Dimel's School
-            </h1>
-          </div>
-          <nav className="hidden md:flex gap-6">
-            <a href="#courses" className="text-gray-600 hover:text-blue-600 transition">
-              Курсы
-            </a>
-            <a href="#about" className="text-gray-600 hover:text-blue-600 transition">
-              О нас
-            </a>
-            <a href="#contact" className="text-gray-600 hover:text-blue-600 transition">
-              Контакты
-            </a>
-          </nav>
-        </div>
-      </header>
+      <PublicHeader />
 
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="grid md:grid-cols-2 gap-12 items-center">

@@ -133,6 +133,7 @@ export class LearningService {
                   locked: isLocked,
                   completedAt: progress?.completedAt ?? null,
                   videoUrl,
+                  content: isLocked ? null : (lesson.content ?? null),
                 };
               }),
             ),

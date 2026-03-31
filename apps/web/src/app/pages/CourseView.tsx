@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { Code2, ChevronLeft, PlayCircle, FileText, Download, Share2, ShoppingCart } from "lucide-react";
+import { PlayCircle, FileText, Download, ShoppingCart } from "lucide-react";
+import { AppHeader } from "../components/AppHeader";
+import { LessonContent } from "../components/course/LessonContent";
 import { CommentsSection } from "../components/course/CommentsSection";
 import { CourseInfoSidebar } from "../components/course/CourseInfoSidebar";
 import { LessonList } from "../components/course/LessonList";
@@ -92,6 +94,7 @@ export function CourseView() {
     locked: boolean;
     completedAt?: string | null;
     videoUrl: string | null;
+    content: string | null;
   }
 
   const modules = useMemo(() => {
@@ -113,6 +116,7 @@ export function CourseView() {
         locked: "locked" in lesson ? lesson.locked : false,
         completedAt: "completedAt" in lesson ? lesson.completedAt : null,
         videoUrl: "videoUrl" in lesson ? lesson.videoUrl : null,
+        content: "content" in lesson ? lesson.content : null,
       })),
     }));
   }, [course]);
@@ -174,48 +178,29 @@ export function CourseView() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link
-                to={user ? "/dashboard" : "/"}
-                className="p-2 hover:bg-gray-100 rounded-lg transition"
-              >
-                <ChevronLeft className="size-5 text-gray-600" />
-              </Link>
-              <div className="flex items-center gap-2">
-                <Code2 className="size-6 text-blue-600" />
-                <h1 className="text-xl font-bold text-gray-900">{course.title}</h1>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button className="p-2 hover:bg-gray-100 rounded-lg transition">
-                <Share2 className="size-5 text-gray-600" />
-              </button>
-              {progress ? (
-                <button
-                  type="button"
-                  disabled={!activeLesson || isCompletingLesson}
-                  onClick={handleCompleteLesson}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-60"
-                >
-                  {isCompletingLesson ? "Сохраняем..." : "Отметить урок"}
-                </button>
-              ) : (
-                <Link
-                  to="/purchase"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium flex items-center gap-2"
-                >
-                  <ShoppingCart className="size-4" />
-                  Купить курс
-                </Link>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
+      <AppHeader
+        title={course.title}
+        actions={
+          progress ? (
+            <button
+              type="button"
+              disabled={!activeLesson || isCompletingLesson}
+              onClick={handleCompleteLesson}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium disabled:opacity-60"
+            >
+              {isCompletingLesson ? "Сохраняем..." : "Отметить урок"}
+            </button>
+          ) : (
+            <Link
+              to="/purchase"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium flex items-center gap-2"
+            >
+              <ShoppingCart className="size-4" />
+              Купить курс
+            </Link>
+          )
+        }
+      />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {errorMessage && (
@@ -253,6 +238,10 @@ export function CourseView() {
                 </div>
               )}
             </div>
+
+            {activeLesson?.content && (
+              <LessonContent content={activeLesson.content} />
+            )}
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-100">
               <div className="border-b border-gray-200">

@@ -1,24 +1,11 @@
-import { Link, Navigate, Outlet, useLocation, useNavigate } from "react-router";
+import { Link, Outlet, useLocation } from "react-router";
 import { useAuth } from "../../context/AuthContext";
-import {
-  Code2,
-  LayoutDashboard,
-  Users,
-  DollarSign,
-  BookOpen,
-  LogOut,
-  Home,
-} from "lucide-react";
+import { LayoutDashboard, Users, DollarSign, BookOpen } from "lucide-react";
+import { AppHeader } from "../../components/AppHeader";
 
 export function AdminLayout() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
-
-  // Проверка доступа админа
-  if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
-    return <Navigate to="/dashboard" replace />;
-  }
 
   const navItems = [
     {
@@ -52,40 +39,7 @@ export function AdminLayout() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <Link to="/admin" className="flex items-center gap-2">
-            <Code2 className="size-8 text-purple-600" />
-            <div>
-              <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                Admin Panel
-              </h1>
-              <p className="text-xs text-gray-500">Dimel's School</p>
-            </div>
-          </Link>
-
-          <div className="flex items-center gap-4">
-            <Link
-              to="/dashboard"
-              className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
-            >
-              <Home className="size-4" />
-              <span className="hidden sm:inline">К платформе</span>
-            </Link>
-            <button
-              onClick={() => {
-                logout();
-                navigate("/");
-              }}
-              className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
-            >
-              <LogOut className="size-4" />
-              <span className="hidden sm:inline">Выйти</span>
-            </button>
-          </div>
-        </div>
-      </header>
+      <AppHeader />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid lg:grid-cols-4 gap-8">

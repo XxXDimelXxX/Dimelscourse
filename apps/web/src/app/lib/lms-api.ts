@@ -157,6 +157,7 @@ export interface CourseWorkspaceResponse {
         locked: boolean;
         completedAt: string | null;
         videoUrl: string | null;
+        content: string | null;
       }>;
     }>;
     resources: Array<{

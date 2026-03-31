@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
-import { Link, Navigate } from "react-router";
-import { Search, BookOpen, Users, Star, SlidersHorizontal, Code2, LogOut, ArrowLeft } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
+import { Link } from "react-router";
+import { Search, BookOpen, Users, Star, SlidersHorizontal } from "lucide-react";
+import { AppHeader } from "../components/AppHeader";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import {
@@ -29,18 +29,12 @@ const sortFns: Record<SortOption, (a: CourseCard, b: CourseCard) => number> = {
 };
 
 export function Courses() {
-  const { user, logout } = useAuth();
-
   const fetcher = useCallback(() => fetchPublishedCourses(), []);
   const { data: courses, isLoading, error } = useAsyncData<CourseCard[]>(fetcher);
 
   const [search, setSearch] = useState("");
   const [levelFilter, setLevelFilter] = useState("all");
   const [sort, setSort] = useState<SortOption>("newest");
-
-  if (!user) {
-    return <Navigate to="/" replace />;
-  }
 
   const filtered = useMemo(() => {
     if (!courses) return [];
@@ -73,36 +67,7 @@ export function Courses() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <Link to="/dashboard" className="flex items-center gap-2">
-              <Code2 className="size-8 text-blue-600" />
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                Dimel's School
-              </h1>
-            </Link>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link
-              to="/dashboard"
-              className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition text-sm"
-            >
-              <ArrowLeft className="size-4" />
-              <span className="hidden sm:inline">Мой дашборд</span>
-            </Link>
-            <button
-              type="button"
-              onClick={() => logout()}
-              className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
-            >
-              <LogOut className="size-4" />
-              <span className="hidden sm:inline">Выйти</span>
-            </button>
-          </div>
-        </div>
-      </header>
+      <AppHeader />
 
       {/* Title */}
       <div className="bg-white border-b">

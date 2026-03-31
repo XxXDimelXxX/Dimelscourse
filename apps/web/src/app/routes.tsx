@@ -1,4 +1,5 @@
 import { createBrowserRouter } from "react-router";
+import { ProtectedRoute, AdminRoute } from "./components/ProtectedRoute";
 import { Home } from "./pages/Home";
 import { Courses } from "./pages/Courses";
 import { Dashboard } from "./pages/Dashboard";
@@ -21,56 +22,68 @@ export const router = createBrowserRouter([
     Component: Home,
   },
   {
-    path: "/courses",
-    Component: Courses,
-  },
-  {
-    path: "/dashboard",
-    Component: Dashboard,
-  },
-  {
     path: "/course/:courseId",
     Component: CourseView,
   },
+  // Protected routes (require auth)
   {
-    path: "/purchase",
-    Component: Purchase,
-  },
-  {
-    path: "/admin",
-    Component: AdminLayout,
+    Component: ProtectedRoute,
     children: [
       {
-        index: true,
-        Component: AdminDashboard,
+        path: "/courses",
+        Component: Courses,
       },
       {
-        path: "users",
-        Component: AdminUsers,
+        path: "/dashboard",
+        Component: Dashboard,
       },
       {
-        path: "payments",
-        Component: AdminPayments,
+        path: "/purchase",
+        Component: Purchase,
       },
+    ],
+  },
+  // Admin routes (require admin/superadmin role)
+  {
+    Component: AdminRoute,
+    children: [
       {
-        path: "course",
-        Component: AdminCourse,
-      },
-      {
-        path: "courses",
-        Component: AdminCoursesList,
-      },
-      {
-        path: "courses/:slug",
-        Component: AdminCourseMeta,
-      },
-      {
-        path: "courses/:slug/structure",
-        Component: AdminCourseStructure,
-      },
-      {
-        path: "courses/:slug/resources",
-        Component: AdminCourseResources,
+        path: "/admin",
+        Component: AdminLayout,
+        children: [
+          {
+            index: true,
+            Component: AdminDashboard,
+          },
+          {
+            path: "users",
+            Component: AdminUsers,
+          },
+          {
+            path: "payments",
+            Component: AdminPayments,
+          },
+          {
+            path: "course",
+            Component: AdminCourse,
+          },
+          {
+            path: "courses",
+            Component: AdminCoursesList,
+          },
+          {
+            path: "courses/:slug",
+            Component: AdminCourseMeta,
+          },
+          {
+            path: "courses/:slug/structure",
+            Component: AdminCourseStructure,
+          },
+          {
+            path: "courses/:slug/resources",
+            Component: AdminCourseResources,
+          },
+        ],
       },
     ],
   },
